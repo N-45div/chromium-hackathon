@@ -18,6 +18,6 @@ contract MockLendingTest is Test {
 
     function testBorrow() public {
         lending.borrow(500);
-        assertTrue(true); // borrow 不 revert 即通过
+        assertTrue(true); 
     }
 }

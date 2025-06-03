@@ -1,25 +1,66 @@
-# CCMM(Cross-chain Money Markets) (temp name)
+## Foundry
 
-## Protocol introduction
+**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
 
-### Background
+Foundry consists of:
 
-### Solved problems
+-   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
+-   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
+-   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
+-   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
 
-### Stack/Architecture
+## Documentation
 
-![draft_Architecture](img/Architecture_draft.png)
+https://book.getfoundry.sh/
 
-## Chainlink Services
+## Usage
 
-notices:
+### Build
 
-1. below should link the related code which applied chainlink services
-2. state changed proof in different chains
+```shell
+$ forge build
+```
 
-- [Chainlink Price Feeds](https://docs.chain.link/docs/using-chainlink-reference-contracts)
-- [Chainlink VRF V2](https://docs.chain.link/docs/chainlink-vrf)
-- [Chainlink Automation](https://docs.chain.link/chainlink-automation/introduction)
-- ...
+### Test
 
-## Sponser Services
+```shell
+$ forge test
+```
+
+### Format
+
+```shell
+$ forge fmt
+```
+
+### Gas Snapshots
+
+```shell
+$ forge snapshot
+```
+
+### Anvil
+
+```shell
+$ anvil
+```
+
+### Deploy
+
+```shell
+$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```
+
+### Cast
+
+```shell
+$ cast <subcommand>
+```
+
+### Help
+
+```shell
+$ forge --help
+$ anvil --help
+$ cast --help
+```
