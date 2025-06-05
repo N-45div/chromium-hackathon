@@ -15,10 +15,21 @@ struct AvaiableBorrowInfo {
     uint64 updatedAt; // timestamp of the last update
 }
 
-interface ICollManagement {
+struct BorrowTokenInfoFromTargetChain {
+    uint8 targetChainId; // the target chain id
+    address recipientAddress; // zero address means no specify
+    address borrowToken;
+    uint256 borrowedAmount;
+    uint64 borrowedTimeStamp; // timestamp of the last update
+    uint64 collateralRatio; // should keep consistent between the source chain and the target chain
+}
+
+interface IBorrowManagement {
     function borrowEnableBySourceChain(AvaiableBorrowInfo memory avaiableBorrowInfo) external returns (bool);
 
-    function borrowSelectedToken(address borrowToken) external returns (bool);
+    function borrowTokeModifiedByTargetChain(BorrowTokenInfoFromTargetChain memory borrowTokenInfoFromTargetChain) external returns (bool);
+
+    function borrowSelectedToken(address borrowToken, uint256 amount) external returns (bool);
 
     function repayBorrowedToken(address borrowToken, uint256 amount) external returns (bool);
 

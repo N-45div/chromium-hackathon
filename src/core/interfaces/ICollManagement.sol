@@ -8,19 +8,9 @@ struct DepositCollateralInfo {
     address borrowToken;
     address recipientAddress; // zero address means no specify
 }
-
 struct TargetChainBorowInfo {
     address borrowToken;
     address recipientAddress; // zero address means no specify
-    uint64 collateralRatio; // should keep consistent between the source chain and the target chain
-}
-
-struct BorrowTokenFromTargetChain {
-    uint8 targetChainId; // the target chain id
-    address recipientAddress; // zero address means no specify
-    address borrowToken;
-    uint256 borrowedAmount;
-    uint64 borrowedTimeStamp; // timestamp of the last update
     uint64 collateralRatio; // should keep consistent between the source chain and the target chain
 }
 
@@ -32,8 +22,6 @@ interface ICollManagement {
     function depositCollateral(DepositCollateralInfo memory depositInfo) external;
 
     function withdrawCollateral(address collateralToken, uint256 amount) external;
-
-    function borrowTokeModifiedBySourceChain(borrowTokenFromTargetChain memory borrowTokenFromTargetChain) external returns (bool);
 
     function setSupportedCollBorrowToken(address collateralToken, address borrowToken) external;
 
