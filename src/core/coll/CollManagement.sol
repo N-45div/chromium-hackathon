@@ -2,8 +2,36 @@
 pragma solidity 0.8.30;
 
 import {ICollManagement, DepositCollateralInfo, TargetChainBorowInfo} from 'src/core/interfaces/ICollManagement.sol';
+import "../interfaces/BorrowInfo.sol";
+import "../interfaces/ICollManagement.sol";
 
 contract CollManagement is ICollManagement {
+
+    mapping(address => uint256) public userCollateral;
+    event CollateralDeposited(address indexed user, uint256 amount);
+
+    function depositCollateral(uint256 amount) external {
+    require(amount > 0, "amount must > 0");
+    userCollateral[msg.sender] += amount;
+    emit CollateralDeposited(msg.sender, amount);
+
+    // Construct BorrowInfo and simulate cross-chain sending messages
+    BorrowInfo memory info = BorrowInfo({
+        user: msg.sender,
+        token: address(0), // If there are multiple currency transactions, they can be replaced
+        amount: amount,
+        sourceChainSelector: 0,  // mock
+        targetChainSelector: 0   // mock
+    });
+    bytes memory payload = abi.encode(info);
+    _sendMessage(payload);
+    }
+
+    function _sendMessage(bytes memory payload) internal {
+    //<---mock--->,waiting for CCIP
+    }
+
+
     // todo only allow the CCIP caller to call this function
     modifier onlyCCIPCaller() {
         // todo add the related CCIP address
