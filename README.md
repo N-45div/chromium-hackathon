@@ -18,50 +18,50 @@ Recognizing these challenges and opportunities, our protocol is specifically des
 
 1. Cross-Chain Lending and Borrowing (Priority 1)
 
-    1. Users can deposit collateral on the source chain and select borrowing tokens on the target chain.
-    2. Chains supported: Ethereum, BNB, Avalanche.
-       Collateral tokens supported: ETH, BNB.
-       Borrowing token supported: USDC.
+   1. Users can deposit collateral on the source chain and select borrowing tokens on the target chain.
+   2. Chains supported: Ethereum, BNB, Avalanche.
+      Collateral tokens supported: ETH, BNB.
+      Borrowing token supported: USDC.
 
 2. Collateral Management (Priority 1)
 
-    1. Efficient management of user collateral and borrowed capital across different chains.
-    2. Consistent maintenance of health factors during deposits and redemptions.
-    3. Robust liquidation management system.
+   1. Efficient management of user collateral and borrowed capital across different chains.
+   2. Consistent maintenance of health factors during deposits and redemptions.
+   3. Robust liquidation management system.
 
 3. Security Management
 
-    1. Multi-signature approvals for large deposits.
-    2. Partnerships with insurance providers.
-    3. Whitelist controls for security.
-    4. AI-driven monitoring for proactive security.
+   1. Multi-signature approvals for large deposits.
+   2. Partnerships with insurance providers.
+   3. Whitelist controls for security.
+   4. AI-driven monitoring for proactive security.
 
 4. Optimized Capital Management
 
-    0. AI-driven yield optimization and automated liquidation protection (Priority 1).
+   0. AI-driven yield optimization and automated liquidation protection (Priority 1).
 
-    1. Dashboard displaying comprehensive lending and borrowing APYs across different supportede chains
-       help user find the potential opportunities or riskes
+   1. Dashboard displaying comprehensive lending and borrowing APYs across different supportede chains
+      help user find the potential opportunities or riskes
 
-    2. Build automated yield scanner showing real opportunities
-       (TO DO)
+   2. Build automated yield scanner showing real opportunities
+      (TO DO)
 
-    3. Hedge fund-targeted functionalities (TODO, more desgin consideration)
-       RESTful APIs for seamless integration
-       Webhook notifications for real-time alerts
-       Risk management endpoints
+   3. Hedge fund-targeted functionalities (TODO, more desgin consideration)
+      RESTful APIs for seamless integration
+      Webhook notifications for real-time alerts
+      Risk management endpoints
 
-    4. Professional capital management tools
-       Portfolio rebalancing algorithms
-       Automated liquidation protection
-       Multi-chain position tracking and analytics
+   4. Professional capital management tools
+      Portfolio rebalancing algorithms
+      Automated liquidation protection
+      Multi-chain position tracking and analytics
 
 5. Privacy (Priority 1)
    User borrowing activities remain private across chains.
    TODO should check these blow points throughly
-    ```
-    How would zkp be used for privacy? What is the value-prop for ensuring certain things are private?
-    ```
+   ```
+   How would zkp be used for privacy? What is the value-prop for ensuring certain things are private?
+   ```
 
 ### Stack/Architecture
 
@@ -74,10 +74,16 @@ notices:
 1. below should link the related code which applied chainlink services
 2. state changed proof in different chains
 
--   [Chainlink Price Feeds](https://docs.chain.link/docs/using-chainlink-reference-contracts)
--   [Chainlink VRF V2](https://docs.chain.link/docs/chainlink-vrf)
--   [Chainlink Automation](https://docs.chain.link/chainlink-automation/introduction)
--   ...
+- [Chainlink Price Feeds](https://docs.chain.link/docs/using-chainlink-reference-contracts)
+- [Chainlink VRF V2](https://docs.chain.link/docs/chainlink-vrf)
+- [Chainlink Automation](https://docs.chain.link/chainlink-automation/introduction)
+- [Chainlink CCIP](https://docs.chain.link/ccip/api-reference/evm/v1.6.0/)
+
+## Instructions
+
+forge install smartcontractkit/chainlink@contracts-v0.8.0
+forge install smartcontractkit/chainlink-ccip@2114b90f39c82c052e05af7c33d42c1ae98f4180
+
 ## Core Contract Interfaces & ABI
 
 ### CollManagement Contract
@@ -86,16 +92,16 @@ notices:
 
 #### Main Functions
 
-| Function Name        | Description                    | Parameters                                 | Return Value |
-|----------------------|-------------------------------|--------------------------------------------|-------------|
-| depositCollateral    | User deposits collateral      | amount (uint256): amount to deposit        | None        |
-| userCollateral       | Query user collateral balance | user (address): user address               | uint256     |
+| Function Name     | Description                   | Parameters                          | Return Value |
+| ----------------- | ----------------------------- | ----------------------------------- | ------------ |
+| depositCollateral | User deposits collateral      | amount (uint256): amount to deposit | None         |
+| userCollateral    | Query user collateral balance | user (address): user address        | uint256      |
 
 #### Events
 
-| Event Name           | Parameters Description                          |
-|----------------------|------------------------------------------------|
-| CollateralDeposited  | user (address): user address<br>amount (uint256): amount |
+| Event Name          | Parameters Description                                   |
+| ------------------- | -------------------------------------------------------- |
+| CollateralDeposited | user (address): user address<br>amount (uint256): amount |
 
 ---
 
@@ -105,16 +111,16 @@ notices:
 
 #### Main Functions
 
-| Function Name        | Description                      | Parameters                                | Return Value |
-|----------------------|----------------------------------|-------------------------------------------|-------------|
-| ccipReceive          | Receives cross-chain borrow call | message (bytes): cross-chain message      | None        |
-| userBorrowed         | Query user's borrowed amount     | user (address): user address              | uint256     |
+| Function Name | Description                      | Parameters                           | Return Value |
+| ------------- | -------------------------------- | ------------------------------------ | ------------ |
+| ccipReceive   | Receives cross-chain borrow call | message (bytes): cross-chain message | None         |
+| userBorrowed  | Query user's borrowed amount     | user (address): user address         | uint256      |
 
 #### Events
 
-| Event Name           | Parameters Description                          |
-|----------------------|------------------------------------------------|
-| BorrowApproved       | user (address): user address<br>amount (uint256): amount |
+| Event Name     | Parameters Description                                   |
+| -------------- | -------------------------------------------------------- |
+| BorrowApproved | user (address): user address<br>amount (uint256): amount |
 
 ---
 
@@ -122,13 +128,13 @@ notices:
 
 #### BorrowInfo
 
-| Field                | Type      | Description                                |
-|----------------------|-----------|--------------------------------------------|
-| user                 | address   | User address                               |
-| token                | address   | Collateral/loan token (supports multi-token)|
-| amount               | uint256   | Amount                                     |
-| sourceChainSelector  | uint64    | Source chain ID                            |
-| targetChainSelector  | uint64    | Target chain ID                            |
+| Field               | Type    | Description                                  |
+| ------------------- | ------- | -------------------------------------------- |
+| user                | address | User address                                 |
+| token               | address | Collateral/loan token (supports multi-token) |
+| amount              | uint256 | Amount                                       |
+| sourceChainSelector | uint64  | Source chain ID                              |
+| targetChainSelector | uint64  | Target chain ID                              |
 
 ---
 

@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.30;
 
-import {BorrowManagement, AvaiableBorrowInfo} from 'src/core/borrow/BorrowManagement.sol';
-import 'forge-std/Test.sol';
-import './utils/Cheats.sol';
-import "../../src/core/interfaces/BorrowInfo.sol";
+import {BorrowManagement, AvaiableBorrowBalance} from "src/core/borrow/BorrowManagement.sol";
+import "forge-std/Test.sol";
+import "./utils/Cheats.sol";
 
 contract BorrowManagementTest is Test {
     BorrowManagement borrowManagement;
 
     Cheats cheats;
+
+    ERC20 mockETH;
 
     function setUp() public {
         borrowManagement = new BorrowManagement();
@@ -41,16 +42,17 @@ contract BorrowManagementTest is Test {
         return true;
     }
 
-    function testCcipReceive() public {
-    BorrowInfo memory info = BorrowInfo({
-        user: address(0xABCD),
-        token: address(0),
-        amount: 100 ether,
-        sourceChainSelector: 0,
-        targetChainSelector: 0
-    });
-    bytes memory message = abi.encode(info);
-    borrowManagement.ccipReceive(message);
-    assertEq(borrowManagement.userBorrowed(address(0xABCD)), 100 ether);
-    }
+    // below funciton inherited from CCIPReceiver
+    // function testCcipReceive() public {
+    //     BorrowInfo memory info = BorrowInfo({
+    //         user: address(0xABCD),
+    //         token: address(0),
+    //         amount: 100 ether,
+    //         sourceChainSelector: 0,
+    //         targetChainSelector: 0
+    //     });
+    //     bytes memory message = abi.encode(info);
+    //     borrowManagement.ccipReceive(message);
+    //     assertEq(borrowManagement.userBorrowed(address(0xABCD)), 100 ether);
+    // }
 }

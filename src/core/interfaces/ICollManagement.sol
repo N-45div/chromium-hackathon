@@ -4,14 +4,16 @@ pragma solidity 0.8.30;
 struct DepositCollateralInfo {
     address collateralToken;
     uint256 amount;
-    uint8 targetChainId;
+    uint256 targetChainId;
     address borrowToken;
     address recipientAddress; // zero address means no specify
+    uint256 collateralRatio;
 }
+
 struct TargetChainBorowInfo {
     address borrowToken;
     address recipientAddress; // zero address means no specify
-    uint64 collateralRatio; // should keep consistent between the source chain and the target chain
+    uint256 syncBorrowBalance;
 }
 
 interface ICollManagement {
@@ -23,8 +25,13 @@ interface ICollManagement {
 
     function withdrawCollateral(address collateralToken, uint256 amount) external;
 
+    function liquidateCollateral(address collateralToken, address user) external;
+
     function setSupportedCollBorrowToken(address collateralToken, address borrowToken) external;
 
     // query the available borrow balance on the target chain for the specified borrow token
-    function getAvaiableChainBorrowBalance(address user, uint8 targetChainId, address borrowToken) external view returns (uint256);
+    function getAvaiableChainBorrowBalance(address user, uint8 targetChainId, address borrowToken)
+        external
+        view
+        returns (uint256);
 }
