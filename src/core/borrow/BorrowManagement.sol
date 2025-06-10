@@ -23,6 +23,8 @@ import {DepositCollateralInfo} from "src/core/interfaces/ICollManagement.sol";
 contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     using SafeERC20 for IERC20;
 
+    address public immutable USDC; // the only borrow token supported now
+
     mapping(address => mapping(address => bool)) public supportBorrowCollToken;
     mapping(address => AvaiableBorrowBalance) public availableBorrowTokenBalances; // for borrow token, current only support USDC
     //This is a complement to the BorrowApproved and userBorrowed declaration
@@ -40,7 +42,9 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
 
     // todo add errors
 
-    constructor(address routerAddress) Ownable(msg.sender) CCIPReceiver(routerAddress) {}
+    constructor(address routerAddress, address USDCAddress) Ownable(msg.sender) CCIPReceiver(routerAddress) {
+        USDC = USDCAddress;
+    }
 
     //  only support USDC for now
     function borrow(uint256 amount) external returns (bool) {
