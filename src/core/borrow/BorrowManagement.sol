@@ -23,7 +23,7 @@ import {DepositCollateralInfo} from "src/core/interfaces/ICollManagement.sol";
 contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     using SafeERC20 for IERC20;
 
-    mapping(address => mapping(address => bool)) public supportedBorrowCollToken;
+    mapping(address => mapping(address => bool)) public supportBorrowCollToken;
     mapping(address => AvaiableBorrowBalance) public availableBorrowTokenBalances; // for borrow token, current only support USDC
     //This is a complement to the BorrowApproved and userBorrowed declaration
     mapping(address => uint256) public userBorrowed;
@@ -43,18 +43,18 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     constructor(address routerAddress) Ownable(msg.sender) CCIPReceiver(routerAddress) {}
 
     //  only support USDC for now
-    function borrow(address borrowToken, uint256 amount) external returns (bool) {
+    function borrow(uint256 amount) external returns (bool) {
         // todo check AvaiableBorrowBalance, then update
         return true;
     }
 
-    function repay(address borrowToken, uint256 amount) external returns (bool) {
+    function repay(uint256 amount) external returns (bool) {
         // todo check AvaiableBorrowBalance, then update
         return true;
     }
 
     function setSupportBorrowCollToken(address borrowToken, address collateralToken) external onlyOwner {
-        supportedBorrowCollToken[borrowToken][collateralToken] = true;
+        supportBorrowCollToken[borrowToken][collateralToken] = true;
     }
 
     // ===================== The main process of core cross-chain message processing =====================
@@ -62,16 +62,16 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
      * @notice Receive the loan message sent by the source chain and complete the operation such as lending to the target chain
      */
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
-        AvaiableBorrowBalance memory avaiableBorrowBalance = abi.decode(message, (AvaiableBorrowBalance));
-        // check supportedBorrowCollToken
+        AvaiableBorrowBalance memory avaiableBorrowBalance = abi.decode(message.data, (AvaiableBorrowBalance));
+        // check supportBorrowCollToken
         borrowEnableBySourceChain(avaiableBorrowBalance);
     }
 
-    function borrowEnableBySourceChain(DepositCollateralInfo memory depositCollateralInfo) internal {
+    function borrowEnableBySourceChain(AvaiableBorrowBalance memory avaiableBorrowBalance) internal {
         // Implementation for enabling borrowing by the source chain
 
         // Calcuate the max available amount based on collateral ratio and collateral amount
-        uint64 collateralRatio = depositCollateralInfo.collateralRatio;
+        uint64 collateralRatio = avaiableBorrowBalance.collateralRatio;
         // Calcuate the max available amount based on collateral ratio and collateral amount
         // TODO update the AvaiableBorrowInfo for user
         // struct AvaiableBorrowBalance {

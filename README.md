@@ -81,8 +81,11 @@ notices:
 
 ## Instructions
 
+```
 forge install smartcontractkit/chainlink@contracts-v0.8.0
 forge install smartcontractkit/chainlink-ccip@2114b90f39c82c052e05af7c33d42c1ae98f4180
+pnpm add @chainlink/contracts // comptaible for chainlink-ccip@2114b90f39c82c052e05af7c33d42c1ae98f4180
+```
 
 ## Core Contract Interfaces & ABI
 

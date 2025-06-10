@@ -2,6 +2,7 @@
 
 pragma solidity 0.8.30;
 
+import {MockERC20} from "./mock/MockERC20.sol";
 import {BorrowManagement, AvaiableBorrowBalance} from "src/core/borrow/BorrowManagement.sol";
 import "forge-std/Test.sol";
 import "./utils/Cheats.sol";
@@ -11,10 +12,11 @@ contract BorrowManagementTest is Test {
 
     Cheats cheats;
 
-    ERC20 mockETH;
+    MockERC20 mockETH;
 
     function setUp() public {
-        borrowManagement = new BorrowManagement();
+        address routerAddress = address(0x1234); // Mock router address TODO
+        borrowManagement = BorrowManagement(routerAddress);
         cheats = Cheats(address(this));
     }
 

@@ -27,7 +27,7 @@ interface ICollManagement {
 
     function liquidateCollateral(address collateralToken, address user) external;
 
-    function setSupportedCollBorrowToken(address collateralToken, address borrowToken) external;
+    function setSupportCollBorrowToken(address collateralToken, address borrowToken) external;
 
     // query the available borrow balance on the target chain for the specified borrow token
     function getAvaiableChainBorrowBalance(address user, uint8 targetChainId, address borrowToken)

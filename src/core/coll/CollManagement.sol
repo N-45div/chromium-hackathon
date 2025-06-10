@@ -5,6 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 // todo add chainlink price feed
 // todo add CCIP
 // TODO import issue for CCIP
+import {CCIPReceiver} from "@chainlink-ccip/chains/evm/contracts/applications/CCIPReceiver.sol";
 import {IRouterClient} from "@chainlink-ccip/chains/evm/contracts/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink-ccip/chains/evm/contracts/libraries/Client.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -13,7 +14,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 // import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 import {ICollManagement, DepositCollateralInfo, TargetChainBorowInfo} from "src/core/interfaces/ICollManagement.sol";
 
-contract CollManagement is ICollManagement, CCIPReceiver {
+contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
     using SafeERC20 for IERC20;
 
     uint256 public immutable COLLATERAL_RATIO = 1_500_000_000_000_000_000; // collateral ratio, 150%
@@ -41,6 +42,8 @@ contract CollManagement is ICollManagement, CCIPReceiver {
         uint256 syncBorrowBalance
     );
 
+    event BorrowCollTokenSupport(address collateralToken, address borrowToken);
+
     //errors
     error UnsupportedCollToken(address collateralToken);
     error UnsupportedCollBorrowToken(address collateralToken, address borrowToken);
@@ -51,7 +54,8 @@ contract CollManagement is ICollManagement, CCIPReceiver {
     // TODO how to show the data?
     error SyncBorrowRatioFail(address collateralToken, address borrowToken, uint256 borrowAmount);
 
-    constructor() Ownable(msg.sender) {}
+    // TODO, only support one router?
+    constructor(address rounter) Ownable(msg.sender) CCIPReceiver(rounter) {}
 
     // TODO chainlink price feed
 
@@ -75,21 +79,22 @@ contract CollManagement is ICollManagement, CCIPReceiver {
             revert NotEnoughDeposit(depositInfo.collateralToken, depositInfo.amount);
         }
 
-        if (!supportedCollBorrowToken[depositInfo.collateralToken][depositInfo.borrowToken]) {
+        if (!supportCollBorrowToken[depositInfo.collateralToken][depositInfo.borrowToken]) {
             revert UnsupportedCollBorrowToken(depositInfo.collateralToken, depositInfo.borrowToken);
         }
 
-        if (depositInfo.recipientAddress = address(0)) {
+        if (depositInfo.recipientAddress == address(0)) {
             // TODO trigger  privacy mode
         }
 
-        depositInfo.collateralToken.safeTransferFrom(msg.sender, address(this), depositInfo.amount);
+        IERC20(depositInfo.collateralToken).safeTransferFrom(msg.sender, address(this), depositInfo.amount);
         collateralBalances[msg.sender][depositInfo.collateralToken] += depositInfo.amount;
 
         emit CollateralDeposited(msg.sender, depositInfo.collateralToken, depositInfo.amount);
 
         // Implementation for depositing collateral with target chain selection
         // todo CCIP message for the target chain
+        bytes memory extraArgs = "0x";
         _sendMessage(depositInfo, extraArgs);
     }
 
@@ -115,9 +120,10 @@ contract CollManagement is ICollManagement, CCIPReceiver {
         // TODO, the profit liquidator can get
     }
 
-    function setSupportedCollBorrowToken(address collateralToken, address borrowToken) external onlyAdmin {
+    function setSupportCollBorrowToken(address collateralToken, address borrowToken) external onlyOwner {
         supportCollToken[collateralToken] = true;
-        supportedCollBorrowToken[collateralToken][borrowToken] = true;
+        supportCollBorrowToken[collateralToken][borrowToken] = true;
+        emit BorrowCollTokenSupport(collateralToken, borrowToken);
     }
 
     function getAvaiableChainBorrowBalance(address user, uint8 targetChainId, address borrowToken)
@@ -132,7 +138,7 @@ contract CollManagement is ICollManagement, CCIPReceiver {
         return 0;
     }
 
-    function _sendMessage(DepositCollateralInfo depositInfo, bytes memory extraBytes) internal {
+    function _sendMessage(DepositCollateralInfo memory depositInfo, bytes memory extraBytes) internal {
         //<---mock--->,waiting for CCIP
         // todo can reference below code
         // Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
@@ -159,9 +165,10 @@ contract CollManagement is ICollManagement, CCIPReceiver {
         // borrowToken
         // recipientAddress: the address can be borrowed on the target chain
         // syncBorrowBalance: the borrowed on the target chain, First DepositCollateral will set it to 0
-        crossBalances[depositInfo.user][depositInfo.targetChainId] = TargetChainBorowInfo({
+
+        crossBalances[msg.sender][depositInfo.targetChainId] = TargetChainBorowInfo({
             borrowToken: depositInfo.borrowToken,
-            amount: depositInfo.recipientAddress,
+            recipientAddress: depositInfo.recipientAddress,
             syncBorrowBalance: 0
         });
 
@@ -178,21 +185,25 @@ contract CollManagement is ICollManagement, CCIPReceiver {
 
     // When borrower borrows the token on the target chain, this function will be called By the CCIP message
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
+        DepositCollateralInfo memory depositInfo = abi.decode(message.data, (DepositCollateralInfo));
+
         // sync check the  COLLATERAL_RATIO for source chain
         // collateralToken's price * amount / borrowToken's price * borrowBalance > collateralRatio
         // return false? inform front-end AI. trigger the source chain: this user can't borrow the token
         // TODO decode the message
-        emit SyncBorrowRatioFail(message.collateralToken, message.borrowToken, message.amount);
+        // revert SyncBorrowRatioFail(depositInfo.collateralToken, depositInfo.borrowToken, depositInfo.amount);
 
         // update the user's syncBorrowBalance in source chain
-        crossBalances[depositInfo.user][depositInfo.targetChainId] = TargetChainBorowInfo({
+        address depositUser = address(0x01); // todo, get the corrosponding deposit user
+
+        crossBalances[depositUser][depositInfo.targetChainId] = TargetChainBorowInfo({
             borrowToken: depositInfo.borrowToken,
-            amount: depositInfo.recipientAddress,
+            recipientAddress: depositInfo.recipientAddress,
             syncBorrowBalance: 0 // should update
         });
 
         emit SyncBorrowBalanceUpdated(
-            depositInfo.user,
+            depositUser,
             depositInfo.collateralToken,
             depositInfo.targetChainId,
             depositInfo.borrowToken,

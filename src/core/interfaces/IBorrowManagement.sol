@@ -29,5 +29,5 @@ interface IBorrowManagement {
 
     function repay(uint256 amount) external returns (bool);
 
-    function setSupportedBorrowCollToken(address collateralToken, address borrowToken) external;
+    function setSupportBorrowCollToken(address borrowToken, address collateralToken) external;
 }
