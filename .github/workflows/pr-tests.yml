@@ -19,6 +19,17 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install @chainlink/contracts
+        run: pnpm add @chainlink/contracts
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
