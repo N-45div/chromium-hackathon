@@ -4,4 +4,4 @@
 forge-std/=lib/forge-std/src/
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
 @chainlink-ccip/=lib/chainlink-ccip/
-@chainlink/contracts=node_modules/@chainlink/contracts
+@chainlink/contracts=lib/chainlink-brownie-contracts/contracts/

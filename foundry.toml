@@ -6,6 +6,7 @@ gas_reports = ["*"]
 optimizer = true
 optimizer_runs = 20000
 fs_permissions = [{ access = "read", path = "lib/foundry-chainlink-toolkit/out"}]
+solc_version = "0.8.30"
 
 # Remappings in remappings.txt
 

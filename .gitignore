@@ -12,4 +12,7 @@ package-lock.json
 .DS_Store
 src/.DS_Store
 
+roadmap.txt
+progress.txt
+
 .prettierrc
