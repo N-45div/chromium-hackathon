@@ -1,17 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-// todo how to guarantee the price consistancy between the source chain and the target chain?
+enum BorrowStatus {
+    INIITIAL,
+    PENDING,
+    BORROWED,
+    REPAY
+}
 
+// collateralToken,borrowToken,initiator tell source chain calculate whose collateralRatio
+//  pendingAmount, if received the confirm from source chain, then pendingAmount==0, borrowedAmount+=pendingAmount
+//  BorrowStatus record the different operation types in target chain
 struct AvaiableBorrowBalance {
-    address recipientAddress; // zero address means no specify(privacy situation)
     address collateralToken;
-    uint256 collateralAmount;
+    uint256 borrowToken; // fixed to USDC for now
+    address initiator; // the user who enable borrow
     uint256 sourceChainId;
-    uint64 collateralRatio; // get by the source chain
-    // the available amount is the amount that can be borrowed on the target chain
-    address borrowToken;
-    uint256 availableAmount;
+    uint256 pendingAmount; // the amount that is pending to be borrowed, each time borrow must ensure pendingAmount == 0.
+    uint256 borrowedAmount;
+    BorrowStatus status;
     uint64 updatedAt; // timestamp of the last update
 }
 
@@ -28,6 +35,4 @@ interface IBorrowManagement {
     function borrow(uint256 amount) external returns (bool);
 
     function repay(uint256 amount) external returns (bool);
-
-    function setSupportBorrowCollToken(address borrowToken, address collateralToken) external;
 }

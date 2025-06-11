@@ -16,6 +16,14 @@ struct TargetChainBorowInfo {
     uint256 syncBorrowBalance;
 }
 
+struct SupportCollInfo {
+    address collateralToken;
+    uint256 collateralRatio;
+    uint256 targetChainId;
+    address borrowToken;
+    bool isSupported;
+}
+
 interface ICollManagement {
     // just depositCollateral without selecting the target chain and the borrow token
     function depositCollateral(address collateralToken, uint256 amount) external;
@@ -26,8 +34,6 @@ interface ICollManagement {
     function withdrawCollateral(address collateralToken, uint256 amount) external;
 
     function liquidateCollateral(address collateralToken, address user) external;
-
-    function setSupportCollBorrowToken(address collateralToken, address borrowToken) external;
 
     // query the available borrow balance on the target chain for the specified borrow token
     function getAvaiableChainBorrowBalance(address user, uint8 targetChainId, address borrowToken)

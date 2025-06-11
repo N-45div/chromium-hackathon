@@ -23,12 +23,10 @@ import {DepositCollateralInfo} from "src/core/interfaces/ICollManagement.sol";
 contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     using SafeERC20 for IERC20;
 
-    address public immutable USDC; // the only borrow token supported now
+    address public immutable BORROW_USDC; // the only borrow token supported now
 
     mapping(address => mapping(address => bool)) public supportBorrowCollToken;
     mapping(address => AvaiableBorrowBalance) public availableBorrowTokenBalances; // for borrow token, current only support USDC
-    //This is a complement to the BorrowApproved and userBorrowed declaration
-    mapping(address => uint256) public userBorrowed;
 
     event BorrowApproved(address indexed user, uint256 amount);
     event BorrowEnabled(
@@ -42,8 +40,12 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
 
     // todo add errors
 
-    constructor(address routerAddress, address USDCAddress) Ownable(msg.sender) CCIPReceiver(routerAddress) {
-        USDC = USDCAddress;
+    constructor(address _borrowToken, address _collateralToken, address routerAddress)
+        Ownable(msg.sender)
+        CCIPReceiver(routerAddress)
+    {
+        BORROW_USDC = _borrowToken;
+        supportBorrowCollToken[_borrowToken][_collateralToken] = true; // default support USDC and the collateral token
     }
 
     //  only support USDC for now
@@ -55,10 +57,6 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     function repay(uint256 amount) external returns (bool) {
         // todo check AvaiableBorrowBalance, then update
         return true;
-    }
-
-    function setSupportBorrowCollToken(address borrowToken, address collateralToken) external onlyOwner {
-        supportBorrowCollToken[borrowToken][collateralToken] = true;
     }
 
     // ===================== The main process of core cross-chain message processing =====================
@@ -75,7 +73,7 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
         // Implementation for enabling borrowing by the source chain
 
         // Calcuate the max available amount based on collateral ratio and collateral amount
-        uint64 collateralRatio = avaiableBorrowBalance.collateralRatio;
+        // uint64 collateralRatio = avaiableBorrowBalance.collateralRatio;
         // Calcuate the max available amount based on collateral ratio and collateral amount
         // TODO update the AvaiableBorrowInfo for user
         // struct AvaiableBorrowBalance {

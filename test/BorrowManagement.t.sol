@@ -22,24 +22,13 @@ contract BorrowManagementTest is Test {
         mockBorrowUSDC = new MockERC20("Mock Borrow USDC", "mUSDC");
 
         vm.startPrank(manager);
-        borrowManagement = new BorrowManagement(routerAddress, address(mockBorrowUSDC));
-        borrowManagement.setSupportBorrowCollToken(address(mockBorrowUSDC), address(mockCollateralWETH));
+        borrowManagement = new BorrowManagement(address(mockBorrowUSDC), address(mockCollateralWETH), routerAddress);
         vm.stopPrank();
     }
 
     function testBorrow() public {}
 
     function testRepay() public {}
-
-    function testSetSupportBorrowCollToken() public {
-        // Set support for a new collateral token
-        vm.startPrank(manager);
-        borrowManagement.setSupportBorrowCollToken(address(mockBorrowUSDC), address(mockCollateralWETH));
-        vm.stopPrank();
-
-        // Check if the support is set correctly
-        assertTrue(borrowManagement.supportBorrowCollToken(address(mockBorrowUSDC), address(mockCollateralWETH)));
-    }
 
     // below funciton inherited from CCIPReceiver
     // function testCcipReceive() public {

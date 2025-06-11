@@ -16,17 +16,19 @@ import {PriceFeedConsumer} from "src/chainlink/PriceFeedConsumer.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {ICollManagement, DepositCollateralInfo, TargetChainBorowInfo} from "src/core/interfaces/ICollManagement.sol";
+import {
+    ICollManagement,
+    DepositCollateralInfo,
+    TargetChainBorowInfo,
+    SupportCollInfo
+} from "src/core/interfaces/ICollManagement.sol";
 
 import {console} from "forge-std/console.sol";
 
 contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 public immutable COLLATERAL_RATIO = 15_000_000_000_000_000_000; // collateral ratio, 150%
-
-    mapping(address => bool) public supportCollToken;
-    mapping(address => mapping(address => bool)) public supportCollBorrowToken;
+    mapping(address => SupportCollInfo) public supportCollInfo; // the config for collateral
     mapping(address => mapping(address => uint256)) public collateralBalances;
     mapping(address => mapping(uint256 => TargetChainBorowInfo)) private crossBalances; // user => targetChainId => target borrow info
 
@@ -48,8 +50,6 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         uint256 syncBorrowBalance
     );
 
-    event BorrowCollTokenSupport(address collateralToken, address borrowToken);
-
     //errors
     error UnsupportedCollToken(address collateralToken);
     error UnsupportedCollBorrowToken(address collateralToken, address borrowToken);
@@ -61,9 +61,29 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         address collateralToken, uint256 amount, address borrowToken, uint256 borrowdBalance
     );
 
-    // TODO, only support one router? or one priceFeed
+    constructor(
+        address _collateralToken,
+        address _collateralTokenPriceFeed,
+        address _borrowToken,
+        address _borrowTokenPriceFeed,
+        uint256 _collateral_ratio,
+        uint256 _targetChainId,
+        address _destionChainRounter
+    ) Ownable(msg.sender) CCIPReceiver(_destionChainRounter) {
+        // initialize the support collateral config
+        SupportCollInfo memory info = SupportCollInfo({
+            collateralToken: _collateralToken,
+            collateralRatio: _collateral_ratio,
+            targetChainId: _targetChainId,
+            borrowToken: _borrowToken,
+            isSupported: true
+        });
 
-    constructor(address _destionChainRounter) Ownable(msg.sender) CCIPReceiver(_destionChainRounter) {}
+        supportCollInfo[_collateralToken] = info;
+        // initialize the realted price feeds for collateral and borrow token
+        priceFeeds[_collateralToken] = AggregatorV3Interface(_collateralTokenPriceFeed);
+        priceFeeds[_borrowToken] = AggregatorV3Interface(_borrowTokenPriceFeed);
+    }
 
     // Just deposit collateral without specific borrow token in target chain
     // Supply the flexibility for user change the borrow token later
@@ -71,7 +91,8 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         if (amount <= 0) {
             revert NotEnoughDeposit(collateralToken, amount);
         }
-        if (!supportCollToken[collateralToken]) {
+
+        if (!supportCollInfo[collateralToken].isSupported) {
             revert UnsupportedCollToken(collateralToken);
         }
 
@@ -85,7 +106,10 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             revert NotEnoughDeposit(depositInfo.collateralToken, depositInfo.amount);
         }
 
-        if (!supportCollBorrowToken[depositInfo.collateralToken][depositInfo.borrowToken]) {
+        if (
+            !supportCollInfo[depositInfo.collateralToken].isSupported
+                || supportCollInfo[depositInfo.collateralToken].borrowToken != depositInfo.borrowToken
+        ) {
             revert UnsupportedCollBorrowToken(depositInfo.collateralToken, depositInfo.borrowToken);
         }
 
@@ -105,17 +129,24 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
     }
 
     function withdrawCollateral(address collateralToken, uint256 amount) external {
+        if (!supportCollInfo[collateralToken].isSupported) {
+            revert UnsupportedCollToken(collateralToken);
+        }
+
         // Check if the user has enough collateral balance
         if (collateralBalances[msg.sender][collateralToken] < amount) {
             revert NotEnoughCollateral(collateralToken, amount);
         }
 
-        uint256 syncBorrowBalance = crossBalances[msg.sender][1].syncBorrowBalance; // Temp Assuming 1 is the target chain ID
+        // default support one target chain
+        uint256 targetChain = supportCollInfo[collateralToken].targetChainId;
+
+        uint256 syncBorrowBalance = crossBalances[msg.sender][targetChain].syncBorrowBalance;
         if (syncBorrowBalance > 0) {
             validcollateralRatio(
                 collateralToken,
                 collateralBalances[msg.sender][collateralToken] - amount,
-                crossBalances[msg.sender][1].borrowToken,
+                crossBalances[msg.sender][targetChain].borrowToken,
                 syncBorrowBalance
             );
         }
@@ -131,17 +162,6 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         //  collateralToken's price * amount / borrowToken's price * borrowBalance > collateralRatio
         // BeyondCollateralRatio
         // TODO, the profit liquidator can get
-    }
-
-    function setSupportCollBorrowToken(address collateralToken, address borrowToken) external onlyOwner {
-        supportCollToken[collateralToken] = true;
-        supportCollBorrowToken[collateralToken][borrowToken] = true;
-        emit BorrowCollTokenSupport(collateralToken, borrowToken);
-    }
-
-    function setPriceFeed(address supportToken, address priceFeed) external onlyOwner {
-        // TODO guarantee the consistency between CollBorrowToken and priceFeed
-        priceFeeds[supportToken] = AggregatorV3Interface(priceFeed);
     }
 
     function getAvaiableChainBorrowBalance(address user, uint8 targetChainId, address borrowToken)
@@ -165,6 +185,9 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         int256 collateralPrice = getLatestPrice(collateralToken);
 
         int256 borrowPrice = getLatestPrice(borrowToken);
+
+        uint256 COLLATERAL_RATIO = supportCollInfo[collateralToken].collateralRatio;
+
         if (
             ((uint256(collateralPrice) * amount * 1e18) / (uint256(borrowPrice) * borrowedAmount * 1e10 * 1e10))
                 <= COLLATERAL_RATIO
@@ -183,9 +206,11 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
     {
         int256 collateralPrice = getLatestPrice(collateralToken);
         int256 borrowPrice = getLatestPrice(borrowToken);
+        // default support one target chain
+        uint256 targetChain = supportCollInfo[collateralToken].targetChainId;
         // todo  1e10 the difference decimal between WETH and USDC (optimize)
         return uint256(collateralPrice) * collateralBalances[user][collateralToken] * 1e18
-            / (uint256(borrowPrice) * crossBalances[user][1].syncBorrowBalance * 1e10 * 1e10);
+            / (uint256(borrowPrice) * crossBalances[user][targetChain].syncBorrowBalance * 1e10 * 1e10);
     }
 
     function _sendMessage(DepositCollateralInfo memory depositInfo, bytes memory extraBytes) internal {
@@ -229,7 +254,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             depositInfo.amount,
             depositInfo.borrowToken,
             depositInfo.targetChainId,
-            COLLATERAL_RATIO
+            supportCollInfo[depositInfo.collateralToken].collateralRatio
         );
     }
 
