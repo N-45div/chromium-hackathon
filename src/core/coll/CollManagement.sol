@@ -6,9 +6,10 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {CCIPReceiver} from "@chainlink-ccip/chains/evm/contracts/applications/CCIPReceiver.sol";
 import {IRouterClient} from "@chainlink-ccip/chains/evm/contracts/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink-ccip/chains/evm/contracts/libraries/Client.sol";
-import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
+import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 
-import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
 import {PriceFeedConsumer} from "src/chainlink/PriceFeedConsumer.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
