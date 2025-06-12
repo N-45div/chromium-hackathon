@@ -8,6 +8,8 @@ struct DepositCollateralInfo {
     address borrowToken;
     address recipientAddress; // zero address means no specify
     uint256 collateralRatio;
+    bytes proof;
+    bytes commit;
 }
 
 struct TargetChainBorowInfo {

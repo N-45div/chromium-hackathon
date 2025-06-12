@@ -2,15 +2,13 @@
 pragma solidity 0.8.30;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-// todo add chainlink price feed
-// TODO integrate CCIP probably
+
 import {CCIPReceiver} from "@chainlink-ccip/chains/evm/contracts/applications/CCIPReceiver.sol";
 import {IRouterClient} from "@chainlink-ccip/chains/evm/contracts/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink-ccip/chains/evm/contracts/libraries/Client.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 
 import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-
 import {PriceFeedConsumer} from "src/chainlink/PriceFeedConsumer.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -22,8 +20,6 @@ import {
     TargetChainBorowInfo,
     SupportCollInfo
 } from "src/core/interfaces/ICollManagement.sol";
-
-import {console} from "forge-std/console.sol";
 
 contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Ownable {
     using SafeERC20 for IERC20;
@@ -78,8 +74,8 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             borrowToken: _borrowToken,
             isSupported: true
         });
-
         supportCollInfo[_collateralToken] = info;
+
         // initialize the realted price feeds for collateral and borrow token
         priceFeeds[_collateralToken] = AggregatorV3Interface(_collateralTokenPriceFeed);
         priceFeeds[_borrowToken] = AggregatorV3Interface(_borrowTokenPriceFeed);

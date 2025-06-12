@@ -2,8 +2,10 @@
 pragma solidity 0.8.30;
 
 enum BorrowStatus {
+    NONE,
     INIITIAL,
     PENDING,
+    CONFIRMED,
     BORROWED,
     REPAY
 }
@@ -19,6 +21,8 @@ struct AvaiableBorrowBalance {
     uint256 pendingAmount; // the amount that is pending to be borrowed, each time borrow must ensure pendingAmount == 0.
     uint256 borrowedAmount;
     BorrowStatus status;
+    bytes proof;
+    bytes commit;
     uint64 updatedAt; // timestamp of the last update
 }
 
@@ -32,7 +36,9 @@ struct BorrowTokenInfoFromTargetChain {
 }
 
 interface IBorrowManagement {
-    function borrow(uint256 amount) external returns (bool);
+    function borrowPending(uint256 amount) external;
 
-    function repay(uint256 amount) external returns (bool);
+    function borrowByConfirmed(uint256 amount) external;
+
+    function repay(uint256 amount) external;
 }

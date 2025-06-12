@@ -14,6 +14,7 @@ import {Client} from "@chainlink-ccip/chains/evm/contracts/libraries/Client.sol"
 import {
     IBorrowManagement,
     AvaiableBorrowBalance,
+    BorrowStatus,
     BorrowTokenInfoFromTargetChain
 } from "src/core/interfaces/IBorrowManagement.sol";
 
@@ -28,17 +29,19 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     mapping(address => mapping(address => bool)) public supportBorrowCollToken;
     mapping(address => AvaiableBorrowBalance) public availableBorrowTokenBalances; // for borrow token, current only support USDC
 
-    event BorrowApproved(address indexed user, uint256 amount);
-    event BorrowEnabled(
-        address indexed user,
-        address indexed collateralToken,
-        uint256 collateralTokenAmount,
-        address indexed borrowToken,
-        uint256 maxAvailableAmount
+    event UserBorrowed(address indexed user, address indexed borrowToken, uint256 amount, uint256 timestamp);
+    // TODO check below params
+    //INIITIAL
+    event BorrowInitial(address indexed initiator, address indexed collateralToken, address borrowToken);
+    event BorrowConfirmed(
+        address indexed initiator, address indexed collateralToken, address borrowToken, uint256 confirmedAmount
     );
-    event BorrowModified(address indexed user, address indexed borrowToken, uint256 maxAvailableAmount);
 
     // todo add errors
+
+    error NOBorrowInfo(address user, address borrowToken);
+    error BorrowAmountNOMathch(address user, address borrowToken, uint256 amount);
+    error BorrowInfoNOConfirmed(address user, address borrowToken);
 
     constructor(address _borrowToken, address _collateralToken, address routerAddress)
         Ownable(msg.sender)
@@ -48,52 +51,99 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
         supportBorrowCollToken[_borrowToken][_collateralToken] = true; // default support USDC and the collateral token
     }
 
-    //  only support USDC for now
-    function borrow(uint256 amount) external returns (bool) {
-        // todo check AvaiableBorrowBalance, then update
-        return true;
+    // TODO make it work with CCIP
+    function borrowPending(uint256 amount) external {
+        // front-end can check how much token can be borrowed
+
+        // switch between the normal  and privacy mode
+
+        if (availableBorrowTokenBalances[msg.sender].status == BorrowStatus.NONE) {
+            revert NOBorrowInfo(msg.sender, BORROW_USDC);
+        }
+
+        // TODO package availableBorrowTokenBalances[msg.sender] to souce chain
+        availableBorrowTokenBalances[msg.sender].pendingAmount + amount; // update the pending amount
+        availableBorrowTokenBalances[msg.sender].status = BorrowStatus.PENDING; // update the status to PENDING
+        availableBorrowTokenBalances[msg.sender].updatedAt = uint64(block.timestamp); // update the timestamp
+            // Send the message through the router and store the returned message ID
+            // messageId = routerAddress.ccipSend(destinationChainSelector, message);
     }
 
-    function repay(uint256 amount) external returns (bool) {
-        // todo check AvaiableBorrowBalance, then update
-        return true;
+    function borrowByConfirmed(uint256 amount) external {
+        // switch between the normal  and privacy mode
+
+        if (availableBorrowTokenBalances[msg.sender].status == BorrowStatus.NONE) {
+            revert NOBorrowInfo(msg.sender, BORROW_USDC);
+        }
+
+        if (availableBorrowTokenBalances[msg.sender].pendingAmount != amount) {
+            revert BorrowAmountNOMathch(msg.sender, BORROW_USDC, amount);
+        }
+
+        if (availableBorrowTokenBalances[msg.sender].status != BorrowStatus.CONFIRMED) {
+            revert BorrowInfoNOConfirmed(msg.sender, BORROW_USDC);
+        }
+
+        availableBorrowTokenBalances[msg.sender].borrowedAmount += amount; // update the borrowed amount
+        availableBorrowTokenBalances[msg.sender].pendingAmount = 0; // reset the pending amount
+        availableBorrowTokenBalances[msg.sender].status = BorrowStatus.BORROWED; // update the status to BORROWED
+        availableBorrowTokenBalances[msg.sender].updatedAt = uint64(block.timestamp); // update the timestamp
+
+        IERC20(BORROW_USDC).safeTransfer(msg.sender, amount); // transfer the borrowed amount to the user
+
+        emit UserBorrowed(msg.sender, BORROW_USDC, amount, block.timestamp);
     }
 
-    // ===================== The main process of core cross-chain message processing =====================
-    /**
-     * @notice Receive the loan message sent by the source chain and complete the operation such as lending to the target chain
-     */
-    function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
+    // TODO add other necessary checks
+    function repay(uint256 amount) external {
+        // switch between the normal  and privacy mode
+
+        if (availableBorrowTokenBalances[msg.sender].status == BorrowStatus.NONE) {
+            revert NOBorrowInfo(msg.sender, BORROW_USDC);
+        }
+
+        IERC20(BORROW_USDC).safeTransferFrom(msg.sender, address(this), amount); // transfer the repay amount from the user to the contract
+        availableBorrowTokenBalances[msg.sender].borrowedAmount -= amount; // update the borrowed amount
+    }
+
+    // BorrowStatus.INIITIAL should be called by CCIP
+    function borrowInitial(Client.Any2EVMMessage memory message) external {
+        // TODO, unify the data for cross-chain Status.INIITIAL
         AvaiableBorrowBalance memory avaiableBorrowBalance = abi.decode(message.data, (AvaiableBorrowBalance));
-        // check supportBorrowCollToken
-        borrowEnableBySourceChain(avaiableBorrowBalance);
+
+        //  check recipientAddress, enter privacy mode
+
+        avaiableBorrowBalance.updatedAt = uint64(block.timestamp);
+        avaiableBorrowBalance.status = BorrowStatus.INIITIAL; // initial status
+
+        //TODO, should unify the data
+        address recipientAddress = address(0x001);
+        availableBorrowTokenBalances[recipientAddress].borrowedAmount = 0;
+
+        emit BorrowInitial(avaiableBorrowBalance.initiator, avaiableBorrowBalance.collateralToken, BORROW_USDC);
     }
 
-    function borrowEnableBySourceChain(AvaiableBorrowBalance memory avaiableBorrowBalance) internal {
-        // Implementation for enabling borrowing by the source chain
+    // BorrowStatus.CONFIRMED should be called by CCIP
+    function borrowPendingConfirmed(Client.Any2EVMMessage memory message) external {
+        // switch between the normal  and privacy mode
 
-        // Calcuate the max available amount based on collateral ratio and collateral amount
-        // uint64 collateralRatio = avaiableBorrowBalance.collateralRatio;
-        // Calcuate the max available amount based on collateral ratio and collateral amount
-        // TODO update the AvaiableBorrowInfo for user
-        // struct AvaiableBorrowBalance {
-        //     address recipientAddress; // zero address means no specify(privacy situation)
-        //     address collateralToken;
-        //     uint256 collateralAmount;
-        //     uint256 sourceChainId;
-        //     uint64 collateralRatio; // get by the source chain
-        //     // the available amount is the amount that can be borrowed on the target chain
-        //     address borrowToken;
-        //     uint256 availableAmount;
-        //     uint64 updatedAt; // timestamp of the last update
-        // }
+        // TODO, unify the data for cross-chain Status.PENDING
+        AvaiableBorrowBalance memory avaiableBorrowBalance = abi.decode(message.data, (AvaiableBorrowBalance));
 
-        // emit BorrowEnabled(
-        //     avaiableBorrowBalance.recipientAddress,
-        //     avaiableBorrowBalance.collateralToken,
-        //     avaiableBorrowBalance.collateralAmount,
-        //     avaiableBorrowBalance.borrowToken,
-        //     maxAvailableAmount
-        // );
+        avaiableBorrowBalance.updatedAt = uint64(block.timestamp);
+        avaiableBorrowBalance.status = BorrowStatus.CONFIRMED;
+
+        //TODO, should unify the data
+        address recipientAddress = address(0x001);
+        availableBorrowTokenBalances[recipientAddress] = avaiableBorrowBalance;
+
+        emit BorrowConfirmed(
+            avaiableBorrowBalance.initiator,
+            avaiableBorrowBalance.collateralToken,
+            BORROW_USDC,
+            avaiableBorrowBalance.pendingAmount
+        );
     }
+
+    function _ccipReceive(Client.Any2EVMMessage memory message) internal override {}
 }
