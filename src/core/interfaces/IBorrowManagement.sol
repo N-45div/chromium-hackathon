@@ -3,11 +3,11 @@ pragma solidity 0.8.30;
 
 enum BorrowStatus {
     NONE,
-    INIITIAL,
-    PENDING,
-    CONFIRMED,
-    BORROWED,
-    REPAY
+    INITIAL,
+    BORROW_PENDING_SOURCE_CONFIRMATION,
+    BORROW_APPROVED_BY_SOURCE,
+    REPAY_PENDING_SOURCE_CONFIRMATION,
+    REPAY_CONFIRMED_BY_SOURCE
 }
 
 // collateralToken,borrowToken,initiator tell source chain calculate whose collateralRatio
@@ -15,7 +15,7 @@ enum BorrowStatus {
 //  BorrowStatus record the different operation types in target chain
 struct AvaiableBorrowBalance {
     address collateralToken;
-    uint256 borrowToken; // fixed to USDC for now
+    address borrowToken; // fixed to USDC for now
     address initiator; // the user who enable borrow
     uint256 sourceChainId;
     uint256 pendingAmount; // the amount that is pending to be borrowed, each time borrow must ensure pendingAmount == 0.
@@ -36,9 +36,7 @@ struct BorrowTokenInfoFromTargetChain {
 }
 
 interface IBorrowManagement {
-    function borrowPending(uint256 amount) external;
-
-    function borrowByConfirmed(uint256 amount) external;
+    function borrowApply(uint256 amount) external;
 
     function repay(uint256 amount) external;
 }

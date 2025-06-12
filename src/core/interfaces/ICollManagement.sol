@@ -12,6 +12,15 @@ struct DepositCollateralInfo {
     bytes commit;
 }
 
+struct CrossChainBorrowInfo {
+    address recipientAddress; // zero address means no specify
+    address collateralToken;
+    address borrowToken;
+    uint256 sourceChainId; // for refeence, if needed
+    uint256 targetChainId; // for refeence, if needed
+}
+
+// TODO, below how to integrate with privacy mode
 struct TargetChainBorowInfo {
     address borrowToken;
     address recipientAddress; // zero address means no specify

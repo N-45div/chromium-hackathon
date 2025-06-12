@@ -19,7 +19,8 @@ import {
     ICollManagement,
     DepositCollateralInfo,
     TargetChainBorowInfo,
-    SupportCollInfo
+    SupportCollInfo,
+    CrossChainBorrowInfo
 } from "src/core/interfaces/ICollManagement.sol";
 
 contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Ownable {
@@ -195,6 +196,17 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         return uint256(collateralPrice) * amount * COLLATERAL_RATIO / (uint256(borrowPrice) * borrowedAmount);
     }
 
+    // TODO, below function should called by the CCIP message, either confirm the borrow or the repay
+
+    function confirmTargetChainStatus(CrossChainBorrowInfo memory crossChainBorrowInfo) external {
+        // TODO, confirm the borrow status
+        // 1. check the collateral ratio
+        // 2. update the syncBorrowBalance for the user
+        // 3. return result.
+
+        // todo, check the collateral ratio
+    }
+
     // TODO, implement support different chains
     function userCollateralRatio(address user, address collateralToken, address borrowToken)
         external
@@ -243,6 +255,14 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             recipientAddress: depositInfo.recipientAddress,
             syncBorrowBalance: 0
         });
+        // TODO plan to apply below data as the typical CCIP message
+        // CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
+        //     recipientAddress: depositInfo.recipientAddress,
+        //     collateralToken: depositInfo.collateralToken,
+        //     borrowToken: depositInfo.borrowToken,
+        //     sourceChainId: block.chainid, // current chain id
+        //     targetChainId: depositInfo.targetChainId
+        // });
 
         // CollateralDepositedWithEnableBorrow
         emit CollateralDepositedWithEnableBorrow(
