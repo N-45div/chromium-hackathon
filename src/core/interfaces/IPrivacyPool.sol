@@ -23,7 +23,9 @@ interface IPrivacyPool {
      * @param recipient The address authorized to borrow on the target chain.
      * @param amount The amount authorized to be borrowed.
      */
-    event BorrowAuthorized(bytes32 indexed nullifierHash, bytes32 indexed commitment, address indexed recipient, uint256 amount);
+    event BorrowAuthorized(
+        bytes32 indexed nullifierHash, bytes32 indexed commitment, address indexed recipient, uint256 amount
+    );
 
     /**
      * @notice Accepts a private deposit, verifies the proof, and adds the commitment to a Merkle tree.
@@ -52,7 +54,7 @@ interface IPrivacyPool {
         address recipient,
         uint256 borrowAmount,
         address borrowToken,
-        uint64 targetChainId,
+        uint256 targetChainId,
         bytes calldata proof
     ) external;
 }

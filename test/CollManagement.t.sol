@@ -16,6 +16,7 @@ contract CollManagementTest is Test {
     MockERC20 mockBorrowUSDC;
     MockV3Aggregator mockV3AggregatorCollateralWETH;
     MockV3Aggregator mockV3AggregatorBorrowUSDC;
+    PrivacyPool privacyPool;
 
     uint256 public immutable COLLATERAL_RATIO = 15_000_000_000_000_000_000; // collateral ratio, 150%
     uint256 targetChainId = 43113; // Avalanche Fuji Testnet
@@ -36,6 +37,8 @@ contract CollManagementTest is Test {
         // mock V3 Aggregators for price feeds
         mockV3AggregatorCollateralWETH = new MockV3Aggregator(18, 2000 * 10 ** 18); // Mock price for WETH
         mockV3AggregatorBorrowUSDC = new MockV3Aggregator(8, 1 * 10 ** 8); // Mock price for USDC
+        // TODO, should change below params
+        privacyPool = new PrivacyPool(20, address(0), address(0), address(0));
 
         vm.startPrank(manager);
 
@@ -46,7 +49,8 @@ contract CollManagementTest is Test {
             address(mockV3AggregatorBorrowUSDC),
             COLLATERAL_RATIO, // 150% collateral ratio
             targetChainId,
-            rounter
+            rounter,
+            address(privacyPool)
         );
 
         vm.stopPrank();

@@ -18,37 +18,47 @@ import {
 
 // below as the cross-chain borrow info
 import {CrossChainBorrowInfo} from "src/core/interfaces/ICollManagement.sol";
+import {PrivacyPool} from "src/core/privacy/PrivacyPool.sol";
 
 contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     using SafeERC20 for IERC20;
 
     address public immutable BORROW_USDC; // the only borrow token supported now
+    address private immutable privacyPool;
 
     mapping(address => mapping(address => bool)) public supportBorrowCollToken;
     mapping(address => AvaiableBorrowBalance) public availableBorrowTokenBalance; // for borrow token, current only support USDC
+    // TODO , don't store the plainText ?
+    mapping(bytes32 => AvaiableBorrowBalance) privateBorrowTokenBalance; // private model
 
     event UserBorrowed(address indexed user, address indexed borrowToken, uint256 amount, uint256 timestamp);
     event BorrowInitial(address indexed initiator, address indexed collateralToken, address borrowToken);
+    event BorrowInitialWithCommitment(bytes32 commitmentHash, address indexed collateralToken, address borrowToken);
     event BorrowApply(
         address indexed user, address indexed collateralToken, address borrowToken, uint256 pendingAmount
     );
+    event BorrowApplyWithCommitment(uint256 pendingAmount, bytes32 commitmentHash);
     event BorrowApprovedAndTransfer(
         address indexed user, address indexed collateralToken, address borrowToken, uint256 amount
     );
     event BorrowRepay(address indexed user, address indexed borrowToken, uint256 repayAmount);
+    event BorrowRepayWithCommitment(bytes32 commitmentHash, uint256 repayAmount);
 
     error NOSupportCollBorrowTokenWhenInitial(address borrowToken, address collateralToken);
     error NOBorrowInfo(address user, address borrowToken);
+    error NOBorrowInfoWithcommitmentHash(bytes32 commitmentHash);
     error BorrowAmountNOMathch(address user, address borrowToken, uint256 amount);
     error BorrowInfoNOConfirmed(address user, address borrowToken);
     error RepayMoreThanBorrowed(address user, address borrowToken, uint256 repayAmount, uint256 borrowedAmount);
+    error RepayMoreThanBorrowedWithCommitmentHash(bytes32 commitmentHash, uint256 repayAmount);
 
-    constructor(address _borrowToken, address _collateralToken, address routerAddress)
+    constructor(address _borrowToken, address _collateralToken, address routerAddress, address _privacyPool)
         Ownable(msg.sender)
         CCIPReceiver(routerAddress)
     {
         BORROW_USDC = _borrowToken;
         supportBorrowCollToken[_borrowToken][_collateralToken] = true; // default support USDC and the collateral token
+        privacyPool = _privacyPool;
     }
 
     // TODO make it work with CCIP
@@ -72,10 +82,51 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
             collateralToken: availableBorrowTokenBalance[msg.sender].collateralToken,
             borrowToken: BORROW_USDC,
             sourceChainId: availableBorrowTokenBalance[msg.sender].sourceChainId,
-            targetChainId: block.chainid
+            targetChainId: block.chainid,
+            commitmentHash: bytes32(0),
+            nullifierHash: bytes32(0),
+            zkProof: bytes("")
         });
 
         emit BorrowApply(msg.sender, availableBorrowTokenBalance[msg.sender].collateralToken, BORROW_USDC, amount);
+    }
+
+    function borrowApply(uint256 amount, bytes32 commitmentHash, bytes calldata proof) external {
+        if (privateBorrowTokenBalance[commitmentHash].status == BorrowStatus.NONE) {
+            revert NOBorrowInfoWithcommitmentHash(commitmentHash);
+        }
+
+        // TODO  nullifierHash below return
+        bytes32 nullifierHash = bytes32(0); // should be the hash of the nullifier, need to be calculated
+        // PrivacyPool(privacyPool).authorizeBorrow(
+        //     commitmentHash,
+        //     bytes32(0), // nullifierHash, should be the hash of the nullifier
+        //     msg.sender, // the user who apply the borrow
+        //     amount,
+        //     BORROW_USDC,
+        //     block.chainid, // target chain id
+        //     proof
+        // );
+
+        // TODO package privateBorrowTokenBalance[msg.sender] to souce chain
+        privateBorrowTokenBalance[commitmentHash].pendingAmount += amount;
+        privateBorrowTokenBalance[commitmentHash].status = BorrowStatus.BORROW_PENDING_SOURCE_CONFIRMATION;
+        privateBorrowTokenBalance[commitmentHash].updatedAt = uint64(block.timestamp);
+        privateBorrowTokenBalance[commitmentHash].proof = proof;
+
+        // TODO, send the message to the source chain
+        CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
+            recipientAddress: address(0x0),
+            collateralToken: availableBorrowTokenBalance[msg.sender].collateralToken,
+            borrowToken: BORROW_USDC,
+            sourceChainId: availableBorrowTokenBalance[msg.sender].sourceChainId,
+            targetChainId: block.chainid,
+            commitmentHash: commitmentHash,
+            nullifierHash: nullifierHash,
+            zkProof: proof
+        });
+
+        emit BorrowApplyWithCommitment(amount, commitmentHash);
     }
 
     // Only Called by CCIP or the automation service
@@ -119,6 +170,39 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
         emit BorrowRepay(msg.sender, BORROW_USDC, amount);
     }
 
+    function repay(uint256 amount, bytes32 commitmentHash, bytes calldata proof) external {
+        // switch between the normal  and privacy mode
+
+        if (privateBorrowTokenBalance[commitmentHash].status == BorrowStatus.NONE) {
+            revert NOBorrowInfoWithcommitmentHash(commitmentHash);
+        }
+        if (privateBorrowTokenBalance[commitmentHash].borrowedAmount < amount) {
+            revert RepayMoreThanBorrowedWithCommitmentHash(commitmentHash, amount);
+        }
+
+        // TODO  nullifierHash below return
+        // PrivacyPool.authorizeRepay ??
+        bytes32 nullifierHash = bytes32(0); // should be the hash of the nullifier, need to be calculated
+        // PrivacyPool(privacyPool).authorizeBorrow(
+        //     commitmentHash,
+        //     bytes32(0), // nullifierHash, should be the hash of the nullifier
+        //     msg.sender, // the user who apply the borrow
+        //     amount,
+        //     BORROW_USDC,
+        //     block.chainid, // target chain id
+        //     proof
+        // );
+
+        IERC20(BORROW_USDC).safeTransferFrom(msg.sender, address(this), amount); // transfer the repay amount from the user to the contract
+        privateBorrowTokenBalance[commitmentHash].borrowedAmount -= amount; // update the borrowed amount
+        privateBorrowTokenBalance[commitmentHash].status = BorrowStatus.REPAY_PENDING_SOURCE_CONFIRMATION;
+        privateBorrowTokenBalance[commitmentHash].updatedAt = uint64(block.timestamp);
+        privateBorrowTokenBalance[commitmentHash].proof = proof;
+
+        // TODO CCIP send the message to the source chain (how to guarantee the consistancy for repay between the source chain and the target chain?)
+        emit BorrowRepayWithCommitment(commitmentHash, amount);
+    }
+
     // BorrowStatus.INIITIAL should be called by CCIP
     // Temp as external, this funciton should as internal, be called by _ccipReceive
     function borrowInitial(CrossChainBorrowInfo memory crossChainBorrowInfo) external {
@@ -140,13 +224,21 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
             borrowedAmount: 0,
             status: BorrowStatus.INITIAL,
             proof: "",
-            commit: "",
             updatedAt: uint64(block.timestamp)
         });
-
-        availableBorrowTokenBalance[crossChainBorrowInfo.recipientAddress] = avaiableBorrowBalance;
-
-        emit BorrowInitial(avaiableBorrowBalance.initiator, avaiableBorrowBalance.collateralToken, BORROW_USDC);
+        if (crossChainBorrowInfo.commitmentHash != bytes32(0)) {
+            // for privacy mode, store the private borrow balance
+            avaiableBorrowBalance.proof = crossChainBorrowInfo.zkProof;
+            avaiableBorrowBalance.initiator = address(0x0);
+            privateBorrowTokenBalance[crossChainBorrowInfo.commitmentHash] = avaiableBorrowBalance;
+            emit BorrowInitialWithCommitment(
+                crossChainBorrowInfo.commitmentHash, avaiableBorrowBalance.collateralToken, BORROW_USDC
+            );
+        } else {
+            // for normal mode, store the available borrow balance
+            availableBorrowTokenBalance[crossChainBorrowInfo.recipientAddress] = avaiableBorrowBalance;
+            emit BorrowInitial(avaiableBorrowBalance.initiator, avaiableBorrowBalance.collateralToken, BORROW_USDC);
+        }
     }
 
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {

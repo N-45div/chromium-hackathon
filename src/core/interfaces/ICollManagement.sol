@@ -7,9 +7,8 @@ struct DepositCollateralInfo {
     uint256 targetChainId;
     address borrowToken;
     address recipientAddress; // zero address means no specify
-    uint256 collateralRatio;
-    bytes proof;
-    bytes commit;
+    bytes proofA;
+    bytes32 commitmentHash;
 }
 
 struct CrossChainBorrowInfo {
@@ -18,6 +17,9 @@ struct CrossChainBorrowInfo {
     address borrowToken;
     uint256 sourceChainId; // for refeence, if needed
     uint256 targetChainId; // for refeence, if needed
+    bytes32 commitmentHash; // linking to the private balance/deposit
+    bytes32 nullifierHash; //  for spend authorization, especially when Source confirms a borrow
+    bytes zkProof;
 }
 
 // TODO, below how to integrate with privacy mode

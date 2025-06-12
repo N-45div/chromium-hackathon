@@ -23,16 +23,21 @@ import {
     CrossChainBorrowInfo
 } from "src/core/interfaces/ICollManagement.sol";
 
+import {PrivacyPool} from "src/core/privacy/PrivacyPool.sol";
+
 contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Ownable {
     using SafeERC20 for IERC20;
 
+    address private immutable privacyPool;
     mapping(address => SupportCollInfo) public supportCollInfo; // the config for collateral
     mapping(address => mapping(address => uint256)) public collateralBalances;
     mapping(address => mapping(uint256 => TargetChainBorowInfo)) private crossBalances; // user => targetChainId => target borrow info
 
     event CollateralDeposited(address indexed user, address indexed collateralToken, uint256 amount);
+    // This event includes two types: nomal/private deposit and deposit with enable borrow
     event CollateralDepositedWithEnableBorrow(
         address indexed user,
+        bytes32 commitmentHash,
         address collateralToken,
         uint256 amount,
         address borrowToken,
@@ -66,7 +71,8 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         address _borrowTokenPriceFeed,
         uint256 _collateral_ratio,
         uint256 _targetChainId,
-        address _destionChainRounter
+        address _destionChainRounter,
+        address _privacyPool
     ) Ownable(msg.sender) CCIPReceiver(_destionChainRounter) {
         // initialize the support collateral config
         SupportCollInfo memory info = SupportCollInfo({
@@ -81,6 +87,8 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         // initialize the realted price feeds for collateral and borrow token
         priceFeeds[_collateralToken] = AggregatorV3Interface(_collateralTokenPriceFeed);
         priceFeeds[_borrowToken] = AggregatorV3Interface(_borrowTokenPriceFeed);
+
+        privacyPool = _privacyPool;
     }
 
     // Just deposit collateral without specific borrow token in target chain
@@ -112,7 +120,11 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         }
 
         if (depositInfo.recipientAddress == address(0)) {
-            // TODO trigger  privacy mode
+            // TODO CHECK
+
+            // PrivacyPool(privacyPool).deposit(
+            //     depositInfo.commitmentHash, depositInfo.proofA, depositInfo.collateralToken, depositInfo.amount
+            // );
         }
 
         IERC20(depositInfo.collateralToken).safeTransferFrom(msg.sender, address(this), depositInfo.amount);
@@ -199,6 +211,13 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
     // TODO, below function should called by the CCIP message, either confirm the borrow or the repay
 
     function confirmTargetChainStatus(CrossChainBorrowInfo memory crossChainBorrowInfo) external {
+        /**
+         * Chain's PrivacyPool needs to verify these (e.g., check if commitmentHash belongs to the original depositor, mark nullifierHash as spent for that commitment on the source side to prevent double-borrowing against the same source deposit).
+         * The user's collateral balance on the Source Chain (crossBalances) is always tied to their address. The link between this address and the commitmentHash is established and managed within the Source Chain's PrivacyPool during the private deposit. This ensures liquidations on the source are always against the actual depositor's address, regardless of borrow privacy on the target.
+         * This approach ensures that the PrivacyPool contracts on both chains are the arbiters of ZK state, while CollManagement and BorrowManagement handle the financial logic and CCIP communication, passing ZK identifiers as needed.
+         *
+         *
+         */
         // TODO, confirm the borrow status
         // 1. check the collateral ratio
         // 2. update the syncBorrowBalance for the user
@@ -255,18 +274,24 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             recipientAddress: depositInfo.recipientAddress,
             syncBorrowBalance: 0
         });
-        // TODO plan to apply below data as the typical CCIP message
-        // CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
-        //     recipientAddress: depositInfo.recipientAddress,
-        //     collateralToken: depositInfo.collateralToken,
-        //     borrowToken: depositInfo.borrowToken,
-        //     sourceChainId: block.chainid, // current chain id
-        //     targetChainId: depositInfo.targetChainId
-        // });
 
-        // CollateralDepositedWithEnableBorrow
+        CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
+            recipientAddress: depositInfo.recipientAddress,
+            collateralToken: depositInfo.collateralToken,
+            borrowToken: depositInfo.borrowToken,
+            sourceChainId: block.chainid, // current chain id
+            targetChainId: depositInfo.targetChainId,
+            commitmentHash: depositInfo.commitmentHash,
+            nullifierHash: 0, // should be set when the source chain confirms the borrow
+            zkProof: depositInfo.proofA
+        });
+
+        // TODO plan to apply below data as the typical CCIP message
+        // CCIP(crossChainBorrowInfo) borrowInitial
+
         emit CollateralDepositedWithEnableBorrow(
             msg.sender,
+            depositInfo.commitmentHash,
             depositInfo.collateralToken,
             depositInfo.amount,
             depositInfo.borrowToken,

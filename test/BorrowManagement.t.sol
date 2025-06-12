@@ -7,6 +7,7 @@ import {BorrowManagement, AvaiableBorrowBalance} from "src/core/borrow/BorrowMan
 
 import {CrossChainBorrowInfo} from "src/core/interfaces/ICollManagement.sol";
 import {BorrowStatus} from "src/core/interfaces/IBorrowManagement.sol";
+import {PrivacyPool} from "src/core/privacy/PrivacyPool.sol";
 import "forge-std/Test.sol";
 
 contract BorrowManagementTest is Test {
@@ -16,6 +17,7 @@ contract BorrowManagementTest is Test {
 
     MockERC20 mockCollateralWETH;
     MockERC20 mockBorrowUSDC;
+    PrivacyPool privacyPool;
 
     address manager = address(0x999);
     address user1 = address(0x1111);
@@ -29,9 +31,13 @@ contract BorrowManagementTest is Test {
         address routerAddress = address(0x1234); // Mock router address TODO
         mockCollateralWETH = new MockERC20("Mock Collateral ETH", "mETH");
         mockBorrowUSDC = new MockERC20("Mock Borrow USDC", "mUSDC");
+        // TODO, should change below params
+        privacyPool = new PrivacyPool(20, address(0), address(0), address(0));
 
         vm.startPrank(manager);
-        borrowManagement = new BorrowManagement(address(mockBorrowUSDC), address(mockCollateralWETH), routerAddress);
+        borrowManagement = new BorrowManagement(
+            address(mockBorrowUSDC), address(mockCollateralWETH), routerAddress, address(privacyPool)
+        );
         vm.stopPrank();
 
         mockBorrowUSDC.mint(address(borrowManagement), supplyUSDCINBorrowManagement);
@@ -51,7 +57,6 @@ contract BorrowManagementTest is Test {
             uint256 pendingAmount,
             uint256 borrowedAmount,
             BorrowStatus status,
-            bytes memory proof,
             bytes memory commit,
             uint64 updatedAt
         ) = borrowManagement.availableBorrowTokenBalance(user1);
@@ -63,7 +68,6 @@ contract BorrowManagementTest is Test {
         assertEq(pendingAmount, 0, "Pending amount should be 0 after initial borrow");
         assertEq(borrowedAmount, 0, "Borrowed amount should be 0 after initial borrow");
         assertEq(uint8(status), uint8(BorrowStatus.INITIAL), "Status should be INIITIAL");
-        assertEq(proof, "", "Proof should be empty after initial borrow");
         assertEq(commit, "", "Commit should be empty after initial borrow");
         assertTrue(updatedAt > 0, "Updated at should be set after initial borrow");
     }
@@ -88,7 +92,6 @@ contract BorrowManagementTest is Test {
             uint256 borrowedAmount,
             BorrowStatus status,
             bytes memory proof,
-            bytes memory commit,
             uint64 updatedAt
         ) = borrowManagement.availableBorrowTokenBalance(user1);
 
@@ -123,7 +126,6 @@ contract BorrowManagementTest is Test {
             uint256 borrowedAmount,
             BorrowStatus status,
             bytes memory proof,
-            bytes memory commit,
             uint64 updatedAt
         ) = borrowManagement.availableBorrowTokenBalance(user1);
         assertEq(pendingAmount, 0, "Pending amount should be 0 after source chain confirmation");
@@ -175,7 +177,6 @@ contract BorrowManagementTest is Test {
             uint256 borrowedAmount,
             BorrowStatus status,
             bytes memory proof,
-            bytes memory commit,
             uint64 updatedAt
         ) = borrowManagement.availableBorrowTokenBalance(user1);
 
@@ -219,7 +220,6 @@ contract BorrowManagementTest is Test {
             uint256 borrowedAmount,
             BorrowStatus status,
             bytes memory proof,
-            bytes memory commit,
             uint64 updatedAt
         ) = borrowManagement.availableBorrowTokenBalance(user1);
         assertEq(pendingAmount, 0, "Pending amount should be 0 after repayment confirmation");
@@ -251,7 +251,10 @@ contract BorrowManagementTest is Test {
             collateralToken: collateralToken,
             borrowToken: borrowToken,
             sourceChainId: sourceChainId,
-            targetChainId: targetChainId
+            targetChainId: targetChainId,
+            commitmentHash: bytes32(0), // For now, we set it to zero
+            nullifierHash: bytes32(0), // For now, we set it to zero
+            zkProof: bytes("") // For now, we set it to empty
         });
         // Emit the BorrowInitial event
         vm.expectEmit(true, true, true, false);

@@ -32,12 +32,7 @@ contract PrivacyPool is IPrivacyPool {
 
     // --- Constructor ---
 
-    constructor(
-        uint32 levels,
-        address _depositVerifier,
-        address _borrowVerifier,
-        address _router
-    ) {
+    constructor(uint32 levels, address _depositVerifier, address _borrowVerifier, address _router) {
         s_commitmentsTree.initialize(levels);
         depositVerifier = IVerifier(_depositVerifier);
         borrowVerifier = IVerifier(_borrowVerifier);
@@ -49,7 +44,10 @@ contract PrivacyPool is IPrivacyPool {
     /**
      * @inheritdoc IPrivacyPool
      */
-    function deposit(bytes32 commitment, bytes calldata proof, address collateralToken, uint256 amount) external override {
+    function deposit(bytes32 commitment, bytes calldata proof, address collateralToken, uint256 amount)
+        external
+        override
+    {
         // For the hackathon, we assume the main CollManagement contract has already received the collateral.
         // Here, we just handle the privacy logic.
 
@@ -73,7 +71,7 @@ contract PrivacyPool is IPrivacyPool {
         address recipient,
         uint256 borrowAmount,
         address borrowToken,
-        uint64 targetChainId,
+        uint256 targetChainId,
         bytes calldata proof
     ) external override {
         // 1. Check that the commitment exists in the tree

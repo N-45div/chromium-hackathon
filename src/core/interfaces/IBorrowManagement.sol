@@ -22,12 +22,11 @@ struct AvaiableBorrowBalance {
     uint256 borrowedAmount;
     BorrowStatus status;
     bytes proof;
-    bytes commit;
     uint64 updatedAt; // timestamp of the last update
 }
 
 struct BorrowTokenInfoFromTargetChain {
-    uint8 targetChainId; // the target chain id
+    uint256 targetChainId; // the target chain id
     address recipientAddress; // zero address means no specify
     address borrowToken;
     uint256 borrowedAmount;
@@ -37,6 +36,8 @@ struct BorrowTokenInfoFromTargetChain {
 
 interface IBorrowManagement {
     function borrowApply(uint256 amount) external;
+    function borrowApply(uint256 amount, bytes32 commitmentHash, bytes calldata proof) external;
 
     function repay(uint256 amount) external;
+    function repay(uint256 amount, bytes32 commitmentHash, bytes calldata proof) external;
 }
