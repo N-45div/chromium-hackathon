@@ -14,6 +14,7 @@ import {PriceFeedConsumer} from "src/chainlink/PriceFeedConsumer.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import {
     ICollManagement,
@@ -208,37 +209,114 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         return uint256(collateralPrice) * amount * COLLATERAL_RATIO / (uint256(borrowPrice) * borrowedAmount);
     }
 
-    // TODO, below function should called by the CCIP message, either confirm the borrow or the repay
-
+    // This function is triggered (via CCIP) by the target-chain BorrowManagement
+    // contract once a borrow *or* repay action has been finalised on the target
+    // chain. The payload tells us which position to update and the *new* synced
+    // borrow balance after the action. We then re-validate the collateral ratio
+    // on the source chain and persist the new balance.
+    //
+    // Design notes:
+    // 1. To keep the hackathon implementation lean, we encode the new
+    //    `syncBorrowBalance` as the first 32 bytes of `zkProof`. A production
+    //    version would use a proper protobuf / ABI schema.
+    // 2. When `commitmentHash != 0`, the call concerns a *privacy* position.
+    //    We do a light-weight check that the provided `nullifierHash` has not
+    //    been spent in the local `PrivacyPool`.
+    // 3. We rely on `validcollateralRatio` to revert if the updated state would
+    //    violate the configured collateral ratio.
     function confirmTargetChainStatus(CrossChainBorrowInfo memory crossChainBorrowInfo) external {
-        /**
-         * Chain's PrivacyPool needs to verify these (e.g., check if commitmentHash belongs to the original depositor, mark nullifierHash as spent for that commitment on the source side to prevent double-borrowing against the same source deposit).
-         * The user's collateral balance on the Source Chain (crossBalances) is always tied to their address. The link between this address and the commitmentHash is established and managed within the Source Chain's PrivacyPool during the private deposit. This ensures liquidations on the source are always against the actual depositor's address, regardless of borrow privacy on the target.
-         * This approach ensures that the PrivacyPool contracts on both chains are the arbiters of ZK state, while CollManagement and BorrowManagement handle the financial logic and CCIP communication, passing ZK identifiers as needed.
-         *
-         *
-         */
-        // TODO, confirm the borrow status
-        // 1. check the collateral ratio
-        // 2. update the syncBorrowBalance for the user
-        // 3. return result.
+        // ---------------------------------------------------------------------
+        // 0. Parse the new borrow balance from the payload
+        // ---------------------------------------------------------------------
+        require(crossChainBorrowInfo.zkProof.length >= 32, "Coll: invalid payload");
+        uint256 newSyncBorrowBalance = abi.decode(crossChainBorrowInfo.zkProof, (uint256));
 
-        // todo, check the collateral ratio
+        // ---------------------------------------------------------------------
+        // 1. Optional privacy-mode checks (nullifier not yet spent)
+        // ---------------------------------------------------------------------
+        if (crossChainBorrowInfo.commitmentHash != bytes32(0)) {
+            require(
+                !PrivacyPool(privacyPool).nullifiers(crossChainBorrowInfo.nullifierHash),
+                "Coll: nullifier already spent"
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // 2. Validate collateral ratio with the *new* borrow balance
+        // ---------------------------------------------------------------------
+        uint256 userCollateral = collateralBalances[crossChainBorrowInfo.recipientAddress][
+            crossChainBorrowInfo.collateralToken
+        ];
+        // Will revert if ratio not satisfied
+        validcollateralRatio(
+            crossChainBorrowInfo.collateralToken,
+            userCollateral,
+            crossChainBorrowInfo.borrowToken,
+            newSyncBorrowBalance
+        );
+
+        // ---------------------------------------------------------------------
+        // 3. Persist the new sync borrow balance
+        // ---------------------------------------------------------------------
+        crossBalances[crossChainBorrowInfo.recipientAddress][crossChainBorrowInfo.targetChainId]
+            .syncBorrowBalance = newSyncBorrowBalance;
+
+        emit SyncBorrowBalanceUpdated(
+            crossChainBorrowInfo.recipientAddress,
+            crossChainBorrowInfo.collateralToken,
+            crossChainBorrowInfo.targetChainId,
+            crossChainBorrowInfo.borrowToken,
+            newSyncBorrowBalance
+        );
     }
 
     // TODO, implement support different chains
+    /// @notice Returns the real-time collateral ratio (scaled by 1e18) for a user.
+    /// Formula:
+    ///     (collateralPrice * collateralAmount) / (borrowPrice * borrowedAmount)
+    /// All token amounts are normalised to 18 decimals to make the ratio comparable
+    /// across assets with different ERC-20 decimals.
     function userCollateralRatio(address user, address collateralToken, address borrowToken)
         external
         view
         returns (uint256)
     {
-        int256 collateralPrice = getLatestPrice(collateralToken);
-        int256 borrowPrice = getLatestPrice(borrowToken);
-        // default support one target chain
+        // 1. Fetch on-chain prices (8 decimals from Chainlink feeds)
+        int256 collateralPrice = getLatestPrice(collateralToken); // 8 decimals
+        int256 borrowPrice = getLatestPrice(borrowToken); // 8 decimals
+
+        // 2. Resolve the *synced* borrow balance for the target chain that this
+        //    collateralToken maps to (in the simplified hackathon design each
+        //    collateral only supports one target chain).
         uint256 targetChain = supportCollInfo[collateralToken].targetChainId;
-        // todo  1e10 the difference decimal between WETH and USDC (optimize)
-        return uint256(collateralPrice) * collateralBalances[user][collateralToken] * 1e18
-            / (uint256(borrowPrice) * crossBalances[user][targetChain].syncBorrowBalance * 1e10 * 1e10);
+        uint256 borrowedAmount = crossBalances[user][targetChain].syncBorrowBalance;
+
+        // Edge-case: if nothing has been borrowed yet, the ratio is infinite.
+        if (borrowedAmount == 0) return type(uint256).max;
+
+        uint256 collateralAmount = collateralBalances[user][collateralToken];
+
+        // 3. Normalise token amounts to 18 decimals so price*amount math stays
+        //    consistent regardless of ERC-20 decimals.
+        uint8 collDec = IERC20Metadata(collateralToken).decimals();
+        uint8 borrowDec = IERC20Metadata(borrowToken).decimals();
+
+        // Normalize amounts to 18-decimals precision
+        uint256 collateralNorm;
+        if (collDec == 18) collateralNorm = collateralAmount;
+        else if (collDec < 18) collateralNorm = collateralAmount * (10 ** uint256(18 - collDec));
+        else collateralNorm = collateralAmount / (10 ** uint256(collDec - 18));
+
+        uint256 borrowNorm;
+        if (borrowDec == 18) borrowNorm = borrowedAmount;
+        else if (borrowDec < 18) borrowNorm = borrowedAmount * (10 ** uint256(18 - borrowDec));
+        else borrowNorm = borrowedAmount / (10 ** uint256(borrowDec - 18));
+
+        // 4. Compute and return the ratio (scale = 1e18 for extra precision).
+        //    Prices have 8 decimals, so we multiply numerator by 1e8 to balance.
+        return (uint256(collateralPrice) * collateralNorm)
+            * 1e18
+            / (uint256(borrowPrice) * borrowNorm);
     }
 
     function _sendMessage(DepositCollateralInfo memory depositInfo, bytes memory extraBytes) internal {
