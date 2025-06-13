@@ -32,7 +32,7 @@ contract BorrowManagementTest is Test {
         mockCollateralWETH = new MockERC20("Mock Collateral ETH", "mETH");
         mockBorrowUSDC = new MockERC20("Mock Borrow USDC", "mUSDC");
         // TODO, should change below params
-        privacyPool = new PrivacyPool(20, address(0), address(0), address(0));
+        privacyPool = new PrivacyPool(20, address(0));
 
         vm.startPrank(manager);
         borrowManagement = new BorrowManagement(
@@ -251,7 +251,10 @@ contract BorrowManagementTest is Test {
             collateralToken: collateralToken,
             borrowToken: borrowToken,
             sourceChainId: _sourceChainId,
-            targetChainId: _targetChainId
+            targetChainId: _targetChainId,
+            commitmentHash: bytes32(0),
+            nullifierHash: bytes32(0),
+            zkProof: ""
         });
         // Emit the BorrowInitial event
         vm.expectEmit(true, true, true, false);

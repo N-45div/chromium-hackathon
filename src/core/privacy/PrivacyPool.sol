@@ -76,8 +76,8 @@ contract PrivacyPool is IPrivacyPool {
         bytes32 nullifierHash,
         address recipient,
         uint256 borrowAmount,
-        address borrowToken,
-        uint256 targetChainId,
+        address /*borrowToken*/,
+        uint256 /*targetChainId*/,
         bytes calldata proof
     ) external override {
         // 1. Check that the commitment exists in the tree

@@ -6,9 +6,9 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {CCIPReceiver} from "@chainlink-ccip/chains/evm/contracts/applications/CCIPReceiver.sol";
 import {IRouterClient} from "@chainlink-ccip/chains/evm/contracts/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink-ccip/chains/evm/contracts/libraries/Client.sol";
-import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
+import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 import {PriceFeedConsumer} from "src/chainlink/PriceFeedConsumer.sol";
 
@@ -174,7 +174,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         // TODO, the profit liquidator can get
     }
 
-    function getAvaiableChainBorrowBalance(address user, uint8 targetChainId, address borrowToken)
+    function getAvaiableChainBorrowBalance(address /*user*/, uint8 /*targetChainId*/, address /*borrowToken*/)
         external
         view
         override
@@ -241,7 +241,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             / (uint256(borrowPrice) * crossBalances[user][targetChain].syncBorrowBalance * 1e10 * 1e10);
     }
 
-    function _sendMessage(DepositCollateralInfo memory depositInfo, bytes memory extraBytes) internal {
+    function _sendMessage(DepositCollateralInfo memory depositInfo, bytes memory /*extraBytes*/) internal {
         //<---mock--->,waiting for CCIP
         // todo can reference below code
         // Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({

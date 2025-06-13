@@ -38,7 +38,7 @@ contract CollManagementTest is Test {
         mockV3AggregatorCollateralWETH = new MockV3Aggregator(18, 2000 * 10 ** 18); // Mock price for WETH
         mockV3AggregatorBorrowUSDC = new MockV3Aggregator(8, 1 * 10 ** 8); // Mock price for USDC
         // TODO, should change below params
-        privacyPool = new PrivacyPool(20, address(0), address(0), address(0));
+        privacyPool = new PrivacyPool(20, address(0));
 
         vm.startPrank(manager);
 
