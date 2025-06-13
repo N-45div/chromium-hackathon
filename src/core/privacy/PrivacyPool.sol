@@ -6,7 +6,9 @@ import {Client} from "@chainlink-ccip/chains/evm/contracts/libraries/Client.sol"
 import {MerkleTree} from "./MerkleTree.sol";
 import {IPrivacyPool} from "../interfaces/IPrivacyPool.sol";
 
-import {IVerifier} from "../interfaces/IVerifier.sol";
+// Import the generated verifier contracts
+import {Groth16Verifier as DepositVerifier} from "../../../contracts/DepositVerifier.sol";
+import {Groth16Verifier as BorrowVerifier} from "../../../contracts/BorrowVerifier.sol";
 
 /**
  * @title PrivacyPool
@@ -27,15 +29,19 @@ contract PrivacyPool is IPrivacyPool {
     mapping(bytes32 => bool) public nullifiers;
 
     // ZK Verifier contracts
-    IVerifier public depositVerifier;
-    IVerifier public borrowVerifier;
+    DepositVerifier public depositVerifier;
+    BorrowVerifier public borrowVerifier;
 
     // --- Constructor ---
 
-    constructor(uint32 levels, address _depositVerifier, address _borrowVerifier, address _router) {
+    constructor(
+        uint32 levels,
+        address _router
+    ) {
         s_commitmentsTree.initialize(levels);
-        depositVerifier = IVerifier(_depositVerifier);
-        borrowVerifier = IVerifier(_borrowVerifier);
+        // Instantiate the concrete verifier contracts
+        depositVerifier = new DepositVerifier();
+        borrowVerifier = new BorrowVerifier();
         s_router = IRouterClient(_router);
     }
 
@@ -52,9 +58,9 @@ contract PrivacyPool is IPrivacyPool {
         // Here, we just handle the privacy logic.
 
         // 1. Verify the ZK proof for the deposit (Proof A)
-        uint256[] memory publicInputs = new uint256[](1);
-        publicInputs[0] = uint256(commitment);
-        // require(depositVerifier.verifyProof(proof, publicInputs), "Invalid deposit proof");
+        (uint[2] memory a, uint[2][2] memory b, uint[2] memory c) = abi.decode(proof, (uint[2], uint[2][2], uint[2]));
+        uint256[1] memory publicInputs = [uint256(commitment)];
+        require(depositVerifier.verifyProof(a, b, c, publicInputs), "Invalid deposit proof");
 
         // 2. Add the commitment to the Merkle tree
         uint256 leafIndex = s_commitmentsTree.insert(commitment);
@@ -81,12 +87,14 @@ contract PrivacyPool is IPrivacyPool {
         require(!nullifiers[nullifierHash], "Nullifier has already been used");
 
         // 3. Verify the ZK proof for the borrow authorization (Proof B)
-        uint256[] memory publicInputs = new uint256[](4);
-        publicInputs[0] = uint256(commitment);
-        publicInputs[1] = uint256(nullifierHash);
-        publicInputs[2] = uint256(uint160(recipient));
-        publicInputs[3] = borrowAmount;
-        // require(borrowVerifier.verifyProof(proof, publicInputs), "Invalid borrow proof");
+        (uint[2] memory a, uint[2][2] memory b, uint[2] memory c) = abi.decode(proof, (uint[2], uint[2][2], uint[2]));
+        uint256[4] memory publicInputs = [
+            uint256(s_commitmentsTree.root()), // Proof is against the current Merkle root
+            uint256(nullifierHash),
+            uint256(uint160(recipient)),
+            borrowAmount
+        ];
+        require(borrowVerifier.verifyProof(a, b, c, publicInputs), "Invalid borrow proof");
 
         // 4. Mark the nullifier as used
         nullifiers[nullifierHash] = true;

@@ -77,16 +77,13 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
         availableBorrowTokenBalance[msg.sender].updatedAt = uint64(block.timestamp);
 
         // TODO, send the message to the source chain
-        CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
-            recipientAddress: msg.sender, // the user who apply the borrow
-            collateralToken: availableBorrowTokenBalance[msg.sender].collateralToken,
-            borrowToken: BORROW_USDC,
-            sourceChainId: availableBorrowTokenBalance[msg.sender].sourceChainId,
-            targetChainId: block.chainid,
-            commitmentHash: bytes32(0),
-            nullifierHash: bytes32(0),
-            zkProof: bytes("")
-        });
+        // CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
+        //     recipientAddress: msg.sender, // the user who apply the borrow
+        //     collateralToken: availableBorrowTokenBalance[msg.sender].collateralToken,
+        //     borrowToken: BORROW_USDC,
+        //     sourceChainId: availableBorrowTokenBalance[msg.sender].sourceChainId,
+        //     targetChainId: block.chainid
+        // });
 
         emit BorrowApply(msg.sender, availableBorrowTokenBalance[msg.sender].collateralToken, BORROW_USDC, amount);
     }

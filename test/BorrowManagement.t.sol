@@ -53,7 +53,7 @@ contract BorrowManagementTest is Test {
             address collateralToken,
             address borrowToken,
             address initiator,
-            uint256 sourceChainId,
+            uint256 sourceChainIdFromContract,
             uint256 pendingAmount,
             uint256 borrowedAmount,
             BorrowStatus status,
@@ -64,7 +64,7 @@ contract BorrowManagementTest is Test {
         assertEq(collateralToken, address(mockCollateralWETH), "Collateral token mismatch");
         assertEq(borrowToken, address(mockBorrowUSDC), "Borrow token mismatch");
         assertEq(initiator, user1, "Initiator mismatch");
-        assertEq(sourceChainId, sourceChainId, "Source chain ID mismatch");
+        assertEq(sourceChainIdFromContract, sourceChainId, "Source chain ID mismatch");
         assertEq(pendingAmount, 0, "Pending amount should be 0 after initial borrow");
         assertEq(borrowedAmount, 0, "Borrowed amount should be 0 after initial borrow");
         assertEq(uint8(status), uint8(BorrowStatus.INITIAL), "Status should be INIITIAL");
@@ -84,12 +84,12 @@ contract BorrowManagementTest is Test {
         vm.stopPrank();
 
         (
-            address collateralToken,
-            address borrowToken,
-            address initiator,
-            uint256 sourceChainId,
+            /*address collateralToken*/,
+            /*address borrowToken*/,
+            /*address initiator*/,
+            /*uint256 _sourceChainId*/,
             uint256 pendingAmount,
-            uint256 borrowedAmount,
+            /*uint256 borrowedAmount*/,
             BorrowStatus status,
             bytes memory proof,
             uint64 updatedAt
@@ -118,10 +118,10 @@ contract BorrowManagementTest is Test {
         mockSourceChainConfirmBorrow(user1, address(mockCollateralWETH), address(mockBorrowUSDC), borrowAmount);
 
         (
-            address collateralToken,
-            address borrowToken,
-            address initiator,
-            uint256 sourceChainId,
+            /*address collateralToken*/,
+            /*address borrowToken*/,
+            /*address initiator*/,
+            /*uint256 _sourceChainId*/,
             uint256 pendingAmount,
             uint256 borrowedAmount,
             BorrowStatus status,
@@ -169,10 +169,10 @@ contract BorrowManagementTest is Test {
         vm.stopPrank();
 
         (
-            address collateralToken,
-            address borrowToken,
-            address initiator,
-            uint256 sourceChainId,
+            /*address collateralToken*/,
+            /*address borrowToken*/,
+            /*address initiator*/,
+            /*uint256 _sourceChainId*/,
             uint256 pendingAmount,
             uint256 borrowedAmount,
             BorrowStatus status,
@@ -212,10 +212,10 @@ contract BorrowManagementTest is Test {
         mockSourceChainConfirmRepay(user1, BorrowStatus.REPAY_CONFIRMED_BY_SOURCE);
 
         (
-            address collateralToken,
-            address borrowToken,
-            address initiator,
-            uint256 sourceChainId,
+            /*address collateralToken*/,
+            /*address borrowToken*/,
+            /*address initiator*/,
+            /*uint256 _sourceChainId*/,
             uint256 pendingAmount,
             uint256 borrowedAmount,
             BorrowStatus status,
@@ -243,18 +243,15 @@ contract BorrowManagementTest is Test {
         address depositor,
         address collateralToken,
         address borrowToken,
-        uint256 sourceChainId,
-        uint256 targetChainId
+        uint256 _sourceChainId,
+        uint256 _targetChainId
     ) public {
         CrossChainBorrowInfo memory info = CrossChainBorrowInfo({
             recipientAddress: depositor,
             collateralToken: collateralToken,
             borrowToken: borrowToken,
-            sourceChainId: sourceChainId,
-            targetChainId: targetChainId,
-            commitmentHash: bytes32(0), // For now, we set it to zero
-            nullifierHash: bytes32(0), // For now, we set it to zero
-            zkProof: bytes("") // For now, we set it to empty
+            sourceChainId: _sourceChainId,
+            targetChainId: _targetChainId
         });
         // Emit the BorrowInitial event
         vm.expectEmit(true, true, true, false);
@@ -262,7 +259,7 @@ contract BorrowManagementTest is Test {
         borrowManagement.borrowInitial(info);
     }
 
-    function mockSourceChainConfirmBorrow(address user, address collateralToken, address borrowToken, uint256 amount)
+    function mockSourceChainConfirmBorrow(address user, address /*collateralToken*/, address /*borrowToken*/, uint256 /*amount*/)
         public
     {
         borrowManagement.borrowApprovedAndTransfer(user);
