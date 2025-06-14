@@ -28,10 +28,7 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     address private immutable privacyPool;
 
     // internal helper to suppress revert when running tests without a real CCIP router
-    function _safeCCIPSend(uint64 destChainSelector, Client.EVM2AnyMessage memory message)
-        internal
-        returns (bytes32)
-    {
+    function _safeCCIPSend(uint64 destChainSelector, Client.EVM2AnyMessage memory message) internal returns (bytes32) {
         address router = getRouter();
         // If router is not a contract (e.g. during unit-tests) just return zero hash
         if (router.code.length == 0) {
@@ -99,13 +96,16 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
         availableBorrowTokenBalance[msg.sender].updatedAt = uint64(block.timestamp);
 
         // TODO, send the message to the source chain
-        // CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
-        //     recipientAddress: msg.sender, // the user who apply the borrow
-        //     collateralToken: availableBorrowTokenBalance[msg.sender].collateralToken,
-        //     borrowToken: BORROW_USDC,
-        //     sourceChainId: availableBorrowTokenBalance[msg.sender].sourceChainId,
-        //     targetChainId: block.chainid
-        // });
+        CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
+            recipientAddress: msg.sender, // the user who apply the borrow
+            collateralToken: availableBorrowTokenBalance[msg.sender].collateralToken,
+            borrowToken: BORROW_USDC,
+            sourceChainId: availableBorrowTokenBalance[msg.sender].sourceChainId,
+            targetChainId: block.chainid,
+            commitmentHash: bytes32(0),
+            nullifierHash: bytes32(0),
+            zkProof: bytes("")
+        });
 
         // ---------------- CCIP SEND ----------------
         uint64 destChainSelector = uint64(availableBorrowTokenBalance[msg.sender].sourceChainId);
@@ -127,7 +127,7 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
             feeToken: address(0) // pay with native gas
         });
 
-                // Send the message safely (will be skipped in tests without a router)
+        // Send the message safely (will be skipped in tests without a router)
         bytes32 messageId = _safeCCIPSend(destChainSelector, message);
         if (messageId != bytes32(0)) {
             emit BorrowApplyMessageSent(messageId, destChainSelector);
