@@ -300,16 +300,7 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
 
     // BorrowStatus.INIITIAL should be called by CCIP
     // Temp as external, this funciton should as internal, be called by _ccipReceive
-    function borrowInitial(CrossChainBorrowInfo memory crossChainBorrowInfo) external {
-        // TODO, unify the data for cross-chain Status.INIITIAL
-        // CrossChainBorrowInfo memory crossChainBorrowInfo = abi.decode(message.data, (CrossChainBorrowInfo));
-
-        if (!supportBorrowCollToken[crossChainBorrowInfo.borrowToken][crossChainBorrowInfo.collateralToken]) {
-            revert NOSupportCollBorrowTokenWhenInitial(
-                crossChainBorrowInfo.borrowToken, crossChainBorrowInfo.collateralToken
-            );
-        }
-
+    function borrowInitial(CrossChainBorrowInfo memory crossChainBorrowInfo, bool isPrivacyMode) internal {
         AvaiableBorrowBalance memory avaiableBorrowBalance = AvaiableBorrowBalance({
             collateralToken: crossChainBorrowInfo.collateralToken,
             borrowToken: crossChainBorrowInfo.borrowToken,
@@ -321,7 +312,7 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
             proof: "",
             updatedAt: uint64(block.timestamp)
         });
-        if (crossChainBorrowInfo.commitmentHash != bytes32(0)) {
+        if (isPrivacyMode) {
             // for privacy mode, store the private borrow balance
             avaiableBorrowBalance.proof = crossChainBorrowInfo.zkProof;
             avaiableBorrowBalance.initiator = address(0x0);
@@ -336,12 +327,50 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
         }
     }
 
+    // TODO, CHECK BORROW INITIAL, BORROW APPROVED AND TRANSFER, REPAY CONFIRM, etc.
+    // Quesiton: BorrowStatus's define can't deal some scenario, when user borrowApply, when not confirmed, but  reapy.
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
-        // borrowInitial(message);
+        CrossChainBorrowInfo memory crossChainBorrowInfo = abi.decode(message.data, (CrossChainBorrowInfo));
+
+        // TODO, should emit the related event?
+        require(
+            supportBorrowCollToken[crossChainBorrowInfo.borrowToken][crossChainBorrowInfo.collateralToken],
+            "Unsupported collateral token for borrow"
+        );
+
+        (bool isPrivacyMode, BorrowStatus status) =
+            checkModeAndStatus(crossChainBorrowInfo.recipientAddress, crossChainBorrowInfo.commitmentHash);
+
+        if (status == BorrowStatus.NONE) {
+            borrowInitial(crossChainBorrowInfo, isPrivacyMode);
+        }
     }
 
     // below funciton aim for mock test, should delete when deploy to mainnet
     function setAvailableBorrowTokenBalance(address user, BorrowStatus status) public {
         availableBorrowTokenBalance[user].status = status;
+    }
+
+    function checkModeAndStatus(address recipientAddress, bytes32 commitmentHash)
+        internal
+        view
+        returns (bool isPrivacyMode, BorrowStatus status)
+    {
+        // bool valid = (recipientAddress == address(0x0)) == (commitmentHash == bytes32(0)); TODO this expression? can apply?
+        if (
+            (recipientAddress == address(0x0) && commitmentHash == bytes32(0))
+                || (recipientAddress != address(0x0) && commitmentHash != bytes32(0))
+        ) {
+            //  TODO add this error Data format error
+            revert();
+        }
+
+        if (commitmentHash != bytes32(0)) {
+            isPrivacyMode = true;
+            status = privateBorrowTokenBalance[commitmentHash].status;
+        } else {
+            isPrivacyMode = false;
+            status = availableBorrowTokenBalance[recipientAddress].status;
+        }
     }
 }
