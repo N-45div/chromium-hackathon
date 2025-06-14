@@ -3,6 +3,6 @@
 @clones=lib/clones-with-immutable-args/src/
 forge-std/=lib/forge-std/src/
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@chainlink/local/=lib/chainlink-local/
 @chainlink-ccip/=lib/chainlink-ccip/
 @chainlink/contracts=lib/chainlink-brownie-contracts/contracts/
-@chainlink/local/=lib/chainlink-local/

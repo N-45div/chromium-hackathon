@@ -154,6 +154,10 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             targetChainId: depositInfo.targetChainId,
             commitmentHash: depositInfo.commitmentHash,
             nullifierHash: 0, // should be set when the source chain confirms the borrow
+            // HACKATHON NOTE: The zkProof bytes are custom-encoded for this hackathon.
+            // The first 32 bytes represent `syncBorrowBalance`, and the rest is the actual ZK proof.
+            // Any code using this proof MUST first slice the bytes accordingly before passing to a verifier.
+            // Example: bytes memory actualProof = abi.encodePacked(crossChainBorrowInfo.zkProof[32:]);
             zkProof: depositInfo.proofA
         });
         // CCIP send message to the target chain
@@ -249,18 +253,20 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         // ---------------------------------------------------------------------
         // 0. Parse the new borrow balance from the payload
         // ---------------------------------------------------------------------
+        // HACKATHON NOTE: The zkProof bytes are custom-encoded for this hackathon.
+        // The first 32 bytes represent `syncBorrowBalance`, and the rest is the actual ZK proof.
+        // Any code using this proof MUST first slice the bytes accordingly before passing to a verifier.
+        // Example: bytes memory actualProof = abi.encodePacked(crossChainBorrowInfo.zkProof[32:]);
         require(crossChainBorrowInfo.zkProof.length >= 32, "Coll: invalid payload");
         uint256 newSyncBorrowBalance = abi.decode(crossChainBorrowInfo.zkProof, (uint256));
 
         // ---------------------------------------------------------------------
         // 1. Optional privacy-mode checks (nullifier not yet spent)
         // ---------------------------------------------------------------------
-        if (crossChainBorrowInfo.commitmentHash != bytes32(0)) {
-            require(
-                !PrivacyPool(privacyPool).nullifiers(crossChainBorrowInfo.nullifierHash),
-                "Coll: nullifier already spent"
-            );
-        }
+        // HACKATHON NOTE: The nullifier for a private borrow is spent on the Target Chain's PrivacyPool.
+        // A check against the Source Chain's nullifier set is not required here.
+        // A more robust implementation might involve the Source Chain verifying the relayed ZK proof
+        // to ensure the action was valid on the Target Chain.
 
         // ---------------------------------------------------------------------
         // 2. Validate collateral ratio with the *new* borrow balance

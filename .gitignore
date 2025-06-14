@@ -13,7 +13,7 @@ package-lock.json
 src/.DS_Store
 
 roadmap.txt
-progress.txt
+
 
 .prettierrc
 *.ptau
