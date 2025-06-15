@@ -24,6 +24,8 @@ import {
     CrossChainBorrowInfo
 } from "src/core/interfaces/ICollManagement.sol";
 
+import {IBorrowManagement} from "src/core/interfaces/IBorrowManagement.sol";
+
 import {PrivacyPool} from "src/core/privacy/PrivacyPool.sol";
 
 contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Ownable {
@@ -73,17 +75,19 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         uint256 _collateral_ratio,
         uint256 _targetChainId,
         address _destionChainRounter,
-        address _privacyPool
+        address _privacyPool,
+        uint64 _targetChainSelector,
+        address _targerChainBorrowManager
     ) Ownable(msg.sender) CCIPReceiver(_destionChainRounter) {
         // initialize the support collateral config
         SupportCollInfo memory info = SupportCollInfo({
             collateralToken: _collateralToken,
             collateralRatio: _collateral_ratio,
             targetChainId: _targetChainId,
+            targetChainSelector: _targetChainSelector,
+            targerChainBorrowManager: _targerChainBorrowManager,
             borrowToken: _borrowToken,
-            isSupported: true,
-            targetChainSelector: 0,
-            targerChainBorrowManager: address(0)
+            isSupported: true
         });
         supportCollInfo[_collateralToken] = info;
 
@@ -92,6 +96,25 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         priceFeeds[_borrowToken] = AggregatorV3Interface(_borrowTokenPriceFeed);
 
         privacyPool = _privacyPool;
+    }
+
+    /**
+     * @notice Initialize cross-chain parameters for a supported collateral token. Can only be called by the contract owner.
+     * @param collateralToken The address of the collateral token that has already been added to `supportCollInfo`.
+     * @param _targerChainBorrowManager The address of the `BorrowManagement` (or any cross-chain borrow manager) on the target chain.
+     * @param _targetChainSelector The Chainlink CCIP chain selector corresponding to the target chain.
+     */
+    function initTargetChainParamsForCCIP(
+        address collateralToken,
+        address _targerChainBorrowManager,
+        uint64 _targetChainSelector
+    ) external onlyOwner {
+        if (!supportCollInfo[collateralToken].isSupported) {
+            revert UnsupportedCollToken(collateralToken);
+        }
+        SupportCollInfo storage info = supportCollInfo[collateralToken];
+        info.targerChainBorrowManager = _targerChainBorrowManager;
+        info.targetChainSelector = _targetChainSelector;
     }
 
     // Just deposit collateral without specific borrow token in target chain
@@ -305,6 +328,13 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             nullifierHash: 0, // should be set when the source chain confirms the borrow
             zkProof: depositInfo.proofA
         });
+        // In production this would be sent via CCIP. For local testing we directly invoke the
+        // target-chain BorrowManagement to bootstrap its state, if the address is configured.
+        address targetBorrowMgr = supportCollInfo[depositInfo.collateralToken].targerChainBorrowManager;
+        if (targetBorrowMgr != address(0)) {
+            // solhint-disable-next-line avoid-low-level-calls
+            IBorrowManagement(targetBorrowMgr).borrowInitial(crossChainBorrowInfo);
+        }
         // CCIP(crossChainBorrowInfo) borrowInitial
 
         emit CollateralDepositedWithEnableBorrow(

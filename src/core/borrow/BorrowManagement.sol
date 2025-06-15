@@ -299,7 +299,7 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
             extraArgs: bytes(""),
             feeToken: address(0)
         });
-        IRouterClient(getRouter()).ccipSend(destChainSelector, message);
+        _safeCCIPSend(destChainSelector, message);
         emit BorrowRepayWithCommitment(commitmentHash, amount);
     }
 
