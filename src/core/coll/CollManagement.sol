@@ -32,7 +32,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
     address private immutable privacyPool;
     mapping(address => SupportCollInfo) public supportCollInfo; // the config for collateral
     mapping(address => mapping(address => uint256)) public collateralBalances;
-    mapping(address => mapping(uint256 => TargetChainBorowInfo)) private crossBalances; // user => targetChainId => target borrow info
+    mapping(address => mapping(uint256 => TargetChainBorowInfo)) public crossBalances; // user => targetChainId => target borrow info
 
     event CollateralDeposited(address indexed user, address indexed collateralToken, uint256 amount);
     // This event includes two types: nomal/private deposit and deposit with enable borrow
@@ -81,7 +81,9 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             collateralRatio: _collateral_ratio,
             targetChainId: _targetChainId,
             borrowToken: _borrowToken,
-            isSupported: true
+            isSupported: true,
+            targetChainSelector: 0,
+            targerChainBorrowManager: address(0)
         });
         supportCollInfo[_collateralToken] = info;
 

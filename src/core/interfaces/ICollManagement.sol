@@ -28,7 +28,13 @@ struct TargetChainBorowInfo {
     address recipientAddress; // zero address means no specify
     uint256 syncBorrowBalance;
 }
-
+// struct SupportCollInfo {
+//     address collateralToken;
+//     uint256 collateralRatio;
+//     uint256 targetChainId;
+//     address borrowToken;
+//     bool isSupported;
+// }   
 struct SupportCollInfo {
     address collateralToken;
     uint256 collateralRatio;
