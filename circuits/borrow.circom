@@ -1,69 +1,70 @@
 pragma circom 2.0.0;
 
-include "../node_modules/circomlib/circuits/comparators.circom"; // For LessThan
-include "../node_modules/circomlib/circuits/merkleTree.circom"; // For MerkleTreeChecker
+// Required circomlib circuits
+include "../node_modules/circomlib/circuits/smt/smtverifier.circom";
+include "../node_modules/circomlib/circuits/mimcsponge.circom";
+include "../node_modules/circomlib/circuits/pedersen.circom";
+include "../node_modules/circomlib/circuits/comparators.circom";
 
-// This template will verify that a leaf is part of a Merkle tree.
-// For a real implementation, you'd use a secure hash like Pedersen or MiMC here.
-// For this example, we'll use a simplified placeholder hash.
-template HashLeftRight() {
-    signal input left;
-    signal input right;
-    signal output hash;
 
-    // Placeholder hash: (left + right) * (left + right)
-    // Replace with a secure hash in a real application.
-    hash <== (left + right) * (left + right);
-}
 
+// This circuit verifies a private borrow operation.
+// It proves that the user knows a secret corresponding to a commitment in the Merkle tree,
+// and generates a unique nullifier to prevent double-spending, without revealing the user's identity.
 template Borrow(levels) {
-    // Public Inputs
-    signal input merkleRoot;
-    signal input nullifierHash; // H(secret) or H(secret, "borrow_tag")
-    signal input recipient;     // Address of the recipient on the target chain
-    signal input borrowAmount;  // Amount to borrow
-    // We might add borrowToken and targetChainId if they need to be constrained by the ZK proof itself.
-    // For now, assuming they are handled outside or implicitly.
+    // --- Public Inputs ---
+    signal input merkleRoot;      // The root of the Merkle tree of commitments.
+    signal input nullifierHash;   // A unique hash to prevent double-spending: H(H(secret)).
+    signal input recipient;       // The address of the recipient on the target chain.
+    signal input borrowAmount;    // The amount to borrow.
 
-    // Private Inputs
-    signal input secret;
-    signal input originalCommitment; // The user's original H(secret)
-    signal input merklePathElements[levels];
-    signal input merklePathIndices[levels]; // 0 for left, 1 for right
+    // --- Private Inputs ---
+    signal input secret;                  // The user's private secret.
+    signal input merklePathElements[levels]; // The path elements for the Merkle proof.
+    signal input merklePathIndices[levels];  // The path indices (0 for left, 1 for right).
 
-    // Verify Merkle Proof
-    // The MerkleTreeChecker component from circomlib can be used here.
-    // It requires the leaf, path elements, path indices, and root.
-    // The hash function used by MerkleTreeChecker needs to be consistent.
-    // We'll use our placeholder HashLeftRight for this example.
-    component merkleProofChecker = MerkleTreeChecker(levels, HashLeftRight());
-    merkleProofChecker.leaf <== originalCommitment;
-    for (var i = 0; i < levels; i++) {
-        merkleProofChecker.pathElements[i] <== merklePathElements[i];
-        merkleProofChecker.pathIndices[i] <== merklePathIndices[i];
-    }
-    merkleProofChecker.root <== merkleRoot;
+    // --- ZK Logic ---
 
-    // Verify originalCommitment is derived from secret
-    // Placeholder for H(secret)
-    signal internal calculated_original_commitment;
-    calculated_original_commitment <== secret * secret; // Placeholder for H(secret)
-    originalCommitment === calculated_original_commitment;
+    // 1. Calculate the user's commitment from their secret: commitment = H(secret).
+    // We use MiMC sponge for SNARK-friendly hashing, which matches the SMTVerifier.
+    component commitment_hasher = MiMCSponge(1, 220, 1);
+    commitment_hasher.ins[0] <== secret;
+    commitment_hasher.k <== 0;
+    signal calculated_commitment <== commitment_hasher.outs[0];
 
-    // Verify nullifierHash is derived from secret
-    // Placeholder for H(secret) or H(secret, "borrow_tag")
-    // If using domain separation for nullifier, the hash calculation would differ slightly.
-    signal internal calculated_nullifier_hash;
-    calculated_nullifier_hash <== secret * secret; // Placeholder, same as commitment for simplicity
-    nullifierHash === calculated_nullifier_hash;
+    // 2. Verify that the calculated commitment exists in the Merkle tree.
+    // 2. Verify that the calculated commitment exists in the Merkle tree using the SMTVerifier.
+    // The SMTVerifier requires the old leaf value, the new leaf value, the root, the proof path, and whether the old leaf existed.
+    // For a simple existence proof, we set oldLeafValue=0, newLeafValue=calculated_commitment, and must prove existence.
+        component merkleProofChecker = SMTVerifier(levels);
+    merkleProofChecker.enabled <== 1; // Enable the verifier
+    merkleProofChecker.root <== merkleRoot; // The public root we are proving against
+    merkleProofChecker.siblings <== merklePathElements; // The Merkle path elements
+    merkleProofChecker.oldKey <== 0; // Not used in this simple inclusion proof
+    merkleProofChecker.oldValue <== 0; // We are proving inclusion of a new leaf, so old value is 0
+    merkleProofChecker.isOld0 <== 1; // We assert the old value was 0
+    merkleProofChecker.key <== calculated_commitment; // The leaf we are proving is in the tree
+    merkleProofChecker.value <== 1; // The value associated with the leaf (can be 1 for existence)
+    merkleProofChecker.fnc <== 0; // Specify function 0 for an inclusion proof
 
-    // Optional: Add constraints for recipient, borrowAmount if needed.
-    // For example, ensure borrowAmount is not zero.
+    // 3. Calculate the nullifier hash from the commitment: nullifier = H(commitment).
+    // This ensures that for each commitment, only one nullifier can be generated.
+    component nullifier_hasher = MiMCSponge(1, 220, 1);
+    nullifier_hasher.ins[0] <== calculated_commitment;
+    nullifier_hasher.k <== 0;
+    signal calculated_nullifier <== nullifier_hasher.outs[0];
+
+    // 4. Constrain the calculated nullifier to match the public nullifierHash.
+    // This proves the user correctly generated the nullifier for their commitment.
+    nullifierHash === calculated_nullifier;
+
+    // 5. Optional: Add application-specific constraints.
+    // For example, ensure the borrowAmount is not zero.
     component isBorrowAmountZero = IsZero();
     isBorrowAmountZero.in <== borrowAmount;
     isBorrowAmountZero.out === 0; // Asserts borrowAmount is NOT zero.
 }
 
-// Assuming a Merkle tree of 20 levels for example.
-// This value should match the one used in the Smart Contract.
-component main = Borrow(20);
+// Instantiate the main component with a Merkle tree of 20 levels.
+// IMPORTANT: This value must match the one used in the PrivacyPool.sol smart contract.
+component main { public [merkleRoot, nullifierHash, recipient, borrowAmount] } = Borrow(20);

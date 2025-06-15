@@ -1,19 +1,24 @@
 pragma circom 2.0.0;
 
+include "../node_modules/circomlib/circuits/mimcsponge.circom";
+
+// Computes the Pedersen hash of a secret.
+// The commitment is H(secret).
+// This circuit is used to generate a proof that a user knows the secret to a given commitment.
 template Deposit() {
-    // Public Inputs
+    // Public input
     signal input commitment;
 
-    // Private Inputs
+    // Private input
     signal input secret;
 
-    // Hash of the secret (mimicking Pedersen hash, actual implementation might differ)
-    // For simplicity, let's assume a simple square for now, replace with actual hash
-    signal internal calculated_commitment;
-    calculated_commitment <== secret * secret; // Placeholder for H(secret)
+    // Hash the secret using MiMC sponge to generate the commitment.
+    component hasher = MiMCSponge(1, 220, 1);
+    hasher.ins[0] <== secret;
+    hasher.k <== 0;
 
-    // Constraint: The calculated commitment must equal the public commitment
-    commitment === calculated_commitment;
+    // Constrain the public commitment to be equal to the output of the hash.
+    commitment === hasher.outs[0];
 }
 
-component main = Deposit();
+component main { public [commitment] } = Deposit();

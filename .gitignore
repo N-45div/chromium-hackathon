@@ -16,3 +16,10 @@ roadmap.txt
 progress.txt
 
 .prettierrc
+*.ptau
+# Circom / SnarkJS build artifacts
+circuits/build/*_js/
+circuits/build/*.r1cs
+circuits/build/*.sym
+circuits/build/*.zkey
+*.wtns
