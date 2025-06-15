@@ -230,62 +230,45 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         return uint256(collateralPrice) * amount * COLLATERAL_RATIO / (uint256(borrowPrice) * borrowedAmount);
     }
 
-    // This function is triggered (via CCIP) by the target-chain BorrowManagement
-    // contract once a borrow *or* repay action has been finalised on the target
-    // chain. The payload tells us which position to update and the *new* synced
-    // borrow balance after the action. We then re-validate the collateral ratio
-    // on the source chain and persist the new balance.
-    //
-    // Design notes:
-    // 1. To keep the hackathon implementation lean, we encode the new
-    //    `syncBorrowBalance` as the first 32 bytes of `zkProof`. A production
-    //    version would use a proper protobuf / ABI schema.
-    // 2. When `commitmentHash != 0`, the call concerns a *privacy* position.
-    //    We do a light-weight check that the provided `nullifierHash` has not
-    //    been spent in the local `PrivacyPool`.
-    // 3. We rely on `validcollateralRatio` to revert if the updated state would
-    //    violate the configured collateral ratio.
-    function confirmTargetChainStatus(CrossChainBorrowInfo memory crossChainBorrowInfo) external {
-        // ---------------------------------------------------------------------
-        // 0. Parse the new borrow balance from the payload
-        // ---------------------------------------------------------------------
-        require(crossChainBorrowInfo.zkProof.length >= 32, "Coll: invalid payload");
-        uint256 newSyncBorrowBalance = abi.decode(crossChainBorrowInfo.zkProof, (uint256));
-
-        // ---------------------------------------------------------------------
-        // 1. Optional privacy-mode checks (nullifier not yet spent)
-        // ---------------------------------------------------------------------
-        if (crossChainBorrowInfo.commitmentHash != bytes32(0)) {
-            require(
-                !PrivacyPool(privacyPool).nullifiers(crossChainBorrowInfo.nullifierHash),
-                "Coll: nullifier already spent"
-            );
-        }
-
-        // ---------------------------------------------------------------------
-        // 2. Validate collateral ratio with the *new* borrow balance
-        // ---------------------------------------------------------------------
-        uint256 userCollateral =
-            collateralBalances[crossChainBorrowInfo.recipientAddress][crossChainBorrowInfo.collateralToken];
-        // Will revert if ratio not satisfied
-        validcollateralRatio(
-            crossChainBorrowInfo.collateralToken, userCollateral, crossChainBorrowInfo.borrowToken, newSyncBorrowBalance
-        );
-
-        // ---------------------------------------------------------------------
-        // 3. Persist the new sync borrow balance
-        // ---------------------------------------------------------------------
-        crossBalances[crossChainBorrowInfo.recipientAddress][crossChainBorrowInfo.targetChainId].syncBorrowBalance =
-            newSyncBorrowBalance;
-
-        emit SyncBorrowBalanceUpdated(
-            crossChainBorrowInfo.recipientAddress,
-            crossChainBorrowInfo.collateralToken,
-            crossChainBorrowInfo.targetChainId,
-            crossChainBorrowInfo.borrowToken,
-            newSyncBorrowBalance
-        );
-    }
+    /**
+     * Below function responds to the borrowApply/repay(both also involved the privacy mode) from the target chain.
+     *
+     * Check process
+     *
+     * 1) check data formart (CrossChainBorrowInfo)
+     * 2) check respond which type
+     *  1) borrowApply 2) borrowApply(Provacy) 3) repay 4) repay(Privacy)
+     *
+     * 3) The logic for each type
+     *   1. borrowApply: check whether or not  the user's collateral ratio is health, if valid, then update crossBalances[msg.sender][targetChain].syncBorrowBalance.
+     * Then call borrowApprovedAndTransfer in target chain by CCIP message.
+     * TODO considering add new BorrowStatus, which should shows the source's chain's confirmation status
+     *   2. repay: same logic, alothough validate collateral ratio seems unnecessary, keep the logic consistent with borrowApply seems better.
+     *   3. borrowApply(Provacy):
+     *
+     * As Sektorial12 mentioned(as below), which means the logic checking commitmentHash and their orginal depositor's address belongs to the PrivacyPool contract
+     *
+     * The user's collateral balance on the Source Chain (crossBalances) is always tied to their address. The link between this address and the commitmentHash is established
+     * and managed within the Source Chain's PrivacyPool during the private deposit. This ensures liquidations on the source are always against the actual depositor's address, regardless of borrow privacy on the target.
+     * https://github.com/N-45div/chromium-hackathon/issues/4#issuecomment-2966105941
+     *
+     *
+     * So the withdrawCollateral and liquidateCollateral during the  privacy mode should check privacy borrow in target chain
+     *
+     *   4. repay(Privacy): TODO chekck
+     *
+     * 4) Define the communication rules for cross-chain borrowApply/repay for this function. (normal/privacy mode)
+     *    borrowApply in target chain, update  BorrowStatus.BORROW_PENDING_SOURCE_CONFIRMATION.
+     *          ==> curret funciton in source chain BorrowStatus.BORROW_CONFIRMED_SOURCE_CONFIRMATION.
+     *          ==> borrowApprovedAndTransfer in target chain  BorrowStatus.BORROW_APPROVED
+     *
+     *   repay in target chain, update BorrowStatus.REPAY_PENDING_SOURCE_CONFIRMATION.
+     *          ==> curret funciton in source chain BorrowStatus.REPAY_CONFIRMED_SOURCE_CONFIRMATION
+     *          ==> repayConfirm in target chain  BorrowStatus.REPAY_CONFIRMED
+     *
+     *
+     */
+    function confirmTargetChainStatus(CrossChainBorrowInfo memory crossChainBorrowInfo) external {}
 
     // TODO, implement support different chains
     /// @notice Returns the real-time collateral ratio (scaled by 1e18) for a user.
