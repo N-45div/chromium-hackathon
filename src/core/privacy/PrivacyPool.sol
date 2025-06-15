@@ -7,13 +7,14 @@ import {MerkleTree} from "./MerkleTree.sol";
 import {IPrivacyPool} from "../interfaces/IPrivacyPool.sol";
 
 import {IVerifier} from "../interfaces/IVerifier.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title PrivacyPool
  * @author Sektorial12 (Cascade)
  * @notice Manages ZK-based private deposits and borrow authorizations.
  */
-contract PrivacyPool is IPrivacyPool {
+contract PrivacyPool is IPrivacyPool, Ownable {
     using MerkleTree for MerkleTree.Tree;
 
     // --- State Variables ---
@@ -32,7 +33,9 @@ contract PrivacyPool is IPrivacyPool {
 
     // --- Constructor ---
 
-    constructor(uint32 levels, address _depositVerifier, address _borrowVerifier, address _router) {
+    constructor(uint32 levels, address _depositVerifier, address _borrowVerifier, address _router)
+        Ownable(msg.sender)
+    {
         s_commitmentsTree.initialize(levels);
         depositVerifier = IVerifier(_depositVerifier);
         borrowVerifier = IVerifier(_borrowVerifier);
@@ -40,6 +43,12 @@ contract PrivacyPool is IPrivacyPool {
     }
 
     // --- External Functions ---
+
+    // Called by CollManagement when a borrow/repay is confirmed on source chain
+    function markNullifier(bytes32 hash) external onlyOwner {
+        require(!nullifiers[hash], "Nullifier already spent");
+        nullifiers[hash] = true;
+    }
 
     /**
      * @inheritdoc IPrivacyPool
