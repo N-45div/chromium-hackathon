@@ -72,12 +72,12 @@ contract PrivacyPool is IPrivacyPool {
      * @inheritdoc IPrivacyPool
      */
     function authorizeBorrow(
-        bytes32 commitment,
+        bytes32 commitment, // This is the new commitment for the borrowed funds, if the borrow itself is private
         bytes32 nullifierHash,
-        address recipient,
+        address recipient, // Recipient on the target chain
         uint256 borrowAmount,
-        address /*borrowToken*/,
-        uint256 /*targetChainId*/,
+        address borrowToken, // Token to be borrowed on the target chain
+        uint64 targetChainSelector, // CCIP Target Chain Selector
         bytes calldata proof
     ) external override {
         // 1. Check that the commitment exists in the tree
@@ -105,14 +105,59 @@ contract PrivacyPool is IPrivacyPool {
 
         emit BorrowAuthorized(nullifierHash, commitment, recipient, borrowAmount);
 
-        // In a full implementation, you would build and send the CCIP message here:
-        // Client.EVM2AnyMessage memory message = _buildCCIPMessage(recipient, borrowAmount, borrowToken);
-        // s_router.ccipSend(targetChainId, message);
+        // Build and send the CCIP message
+        // The fee token can be LINK or native, depending on the chain and CCIP configuration
+        // For simplicity, we'll assume fee payment is handled or not required for this example call.
+        Client.EVM2AnyMessage memory message = _buildCCIPMessage(recipient, borrowAmount, borrowToken, commitment);
+        
+        // Get the fee. For simplicity, we'll use 0, but in a real scenario, you'd query the router.
+        uint256 fee = 0; // s_router.getFee(targetChainSelector, message);
+        
+        // Send the message. Ensure contract has enough fee token (e.g. LINK or native gas token)
+        bytes32 messageId = s_router.ccipSend{value: fee}(targetChainSelector, message);
+
+        emit CCIPMessageSent(messageId, targetChainSelector, message);
     }
 
     // --- Internal Functions ---
 
+    /**
+     * @dev Builds the CCIP message for authorizing a borrow on a target chain.
+     * @param _recipient The address of the recipient on the target chain.
+     * @param _borrowAmount The amount to be borrowed.
+     * @param _borrowToken The token to be borrowed.
+     * @param _newCommitment The new commitment for the borrowed funds (if borrow is private).
+     * @return The CCIP message.
+     */
+    function _buildCCIPMessage(
+        address _recipient,
+        uint256 _borrowAmount,
+        address _borrowToken,
+        bytes32 _newCommitment
+    ) internal pure returns (Client.EVM2AnyMessage memory) {
+        // Encode the data payload. This structure must be agreed upon with the target chain receiver contract.
+        // Example: (address recipient, uint256 amount, address token, bytes32 newCommitmentHash)
+        bytes memory data = abi.encode(_recipient, _borrowAmount, _borrowToken, _newCommitment);
+
+        // For simplicity, allow any address to receive the message on the target chain.
+        // In a real scenario, this would be the address of your receiver contract on the target chain.
+        address receiver = address(0); // Placeholder, should be the actual receiver contract address
+
+        return Client.EVM2AnyMessage({
+            receiver: abi.encode(receiver), // Receiver address on the destination chain
+            data: data, // Encoded payload
+            tokenAmounts: new Client.EVMTokenAmount[](0), // No token transfers with this message itself
+            feeToken: address(0), // Address of the fee token, address(0) for native gas token
+            extraArgs: "0x" // Extra arguments, for future use or specific router needs
+        });
+    }
+
     function getRoot() public view returns (bytes32) {
         return s_commitmentsTree.root();
     }
+
+    // --- Events ---
+    event CCIPMessageSent(bytes32 indexed messageId, uint64 indexed targetChainSelector, Client.EVM2AnyMessage message);
+
 }
+

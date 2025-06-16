@@ -54,7 +54,7 @@ interface IPrivacyPool {
         address recipient,
         uint256 borrowAmount,
         address borrowToken,
-        uint256 targetChainId,
+        uint64 targetChainSelector, // CCIP Target Chain Selector
         bytes calldata proof
     ) external;
 }
