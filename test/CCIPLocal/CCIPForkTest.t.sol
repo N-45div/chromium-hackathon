@@ -90,11 +90,6 @@ contract CCIPLocalTest is Test {
         sender_collManagement.initTargetChainParamsForCCIP(
             address(mockCollateralWETH), address(receiver_borrowManagement), destNetworkDetails.chainSelector
         );
-
-        // vm.selectFork(destinationFork);
-        // receiver_borrowManagement.initSourceChainParamsForCCIP(
-        //     address(mockBorrowUSDC), address(sender_collManagement), sourceChainSelector
-        // );
     }
 
     function testForkDepositCollWithEnableBorrowNormalMode() public {
@@ -151,10 +146,6 @@ contract CCIPLocalTest is Test {
         assertEq(uint8(status), uint8(BorrowStatus.INITIAL), "Status should be NONE");
         assertEq(proof, bytes(""), "Proof should be empty in normal mode");
         assertEq(currentTimeStamp, updatedAt);
-
-        // vm.startPrank(recipient_by_depositor);
-        // receiver_borrowManagement.borrowApply(100e8); // 100 USDC
-        // vm.stopPrank();
     }
 
     function _createCollManagement(uint256 targetChainId, address privacyPool, address sourceRouter, address linkToken)
@@ -182,55 +173,4 @@ contract CCIPLocalTest is Test {
             address(mockBorrowUSDC), address(mockCollateralWETH), destinationRouter, privacyPool, linkToken
         );
     }
-
-    // // TODO list. the necessary test features list for hackathon
-
-    // function _initContracts(address linkToken, address sourceRouter, address destinationRouter)
-    //     internal
-    //     returns (CollManagement sender_collManagement, BorrowManagement receiver_borrowManagement)
-    // {
-    //     // initialize CollManagement
-    //     mockCollateralWETH = new MockERC20("Mock Collateral ETH", "mETH");
-    //     mockBorrowUSDC = new MockERC20("Mock Borrow USDC", "mUSDC");
-
-    //     // mock V3 Aggregators for price feeds
-    //     mockV3AggregatorCollateralWETH = new MockV3Aggregator(18, 2000 * 10 ** 18); // Mock price for WETH
-    //     mockV3AggregatorBorrowUSDC = new MockV3Aggregator(8, 1 * 10 ** 8); // Mock price for USDC
-    //     // TODO, should change below params
-    //     privacyPool = new PrivacyPool(20, address(0));
-
-    //     vm.startPrank(manager);
-
-    //     //   uint64 _targetChainSelector,
-    //     // address _targerChainBorrowManager
-
-    //     sender_collManagement = new CollManagement(
-    //         address(mockCollateralWETH),
-    //         address(mockV3AggregatorCollateralWETH),
-    //         address(mockBorrowUSDC),
-    //         address(mockV3AggregatorBorrowUSDC),
-    //         COLLATERAL_RATIO, // 150% collateral ratio
-    //         targetChainId,
-    //         sourceRouter,
-    //         address(privacyPool),
-    //         linkToken
-    //     );
-
-    //     // initialize BorrowManagement
-    //     // TODO confirm linkToken same for source and target chain?
-    //     receiver_borrowManagement = new BorrowManagement(
-    //         address(mockBorrowUSDC), address(mockCollateralWETH), destinationRouter, address(privacyPool), linkToken
-    //     );
-    //     mockBorrowUSDC.mint(address(receiver_borrowManagement), supplyUSDCINBorrowManagement);
-
-    //     sender_collManagement.initTargetChainParamsForCCIP(
-    //         address(mockCollateralWETH), address(receiver_borrowManagement), targetChainSelector
-    //     );
-
-    //     receiver_borrowManagement.initSourceChainParamsForCCIP(
-    //         address(mockBorrowUSDC), address(sender_collManagement), sourceChainSelector
-    //     );
-
-    //     vm.stopPrank();
-    // }
 }

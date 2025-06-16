@@ -341,31 +341,14 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         _sendMessage(crossChainBorrowInfo.collateralToken, abi.encode(ackInfo));
     }
 
-    // below funciton for test, should delete in production
-    function borrowConfirmForTest(CrossChainBorrowInfo memory crossChainBorrowInfo) public {
-        borrowApplyConfirm(crossChainBorrowInfo);
-    }
-
     /////////////////////////////////////////////////////////////////////////////// CCIP  ///////////////////////////////////////////////////////////////////////////////
     function _sendMessage(address collateralToken, bytes memory data) internal returns (bytes32 messageId) {
         address receiver = supportCollInfo[collateralToken].targerChainBorrowManager;
         uint64 destinationChainSelector = supportCollInfo[collateralToken].targetChainSelector;
-
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(receiver),
             data: data,
             tokenAmounts: new Client.EVMTokenAmount[](0), // only send message without token transfer
-            // TODO below check. for scenario: Borrow Apply in target chain ===> Approved in source chain ==> confirmBorrow in target chain
-            // extraArgs: Client._argsToBytes(
-            //     // Additional arguments, setting gas limit and allowing out-of-order execution.
-            //     // Best Practice: For simplicity, the values are hardcoded. It is advisable to use a more dynamic approach
-            //     // where you set the extra arguments off-chain. This allows adaptation depending on the lanes, messages,
-            //     // and ensures compatibility with future CCIP upgrades. Read more about it here: https://docs.chain.link/ccip/concepts/best-practices/evm#using-extraargs
-            //     Client.GenericExtraArgsV2({
-            //         gasLimit: 90_000, // Gas limit for the callback on the destination chain
-            //         allowOutOfOrderExecution: true // Allows the message to be executed out of order relative to other messages from the same sender
-            //     })
-            // ),
             extraArgs: "",
             feeToken: linkToken
         });
@@ -430,17 +413,10 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         // According to status: logic switch TOOD Add more related logic
         if (status == BorrowStatus.BORROW_PENDING_TARGET) {
             borrowApplyConfirm(crossChainBorrowInfo);
+            // TODO below test just for roundTest
         }
     }
     /////////////////////////////////////////////////////////////////////////////// CCIP  ///////////////////////////////////////////////////////////////////////////////
-
-    // just for local test, should delete in production
-    function setCrossBalances(address user, uint256 targetChainId, TargetChainBorowInfo memory targetChainBorowInfo)
-        external
-        onlyOwner
-    {
-        crossBalances[user][targetChainId] = targetChainBorowInfo;
-    }
 
     function getDepositors() external view returns (address[] memory) {
         return depositors;
@@ -454,18 +430,18 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
 
         // Assuming price feed returns price with 8 decimals
         int256 collateralPrice = getLatestPrice(supportedCollateralToken);
-        uint256 totalCollateralValue = (userCollateralBalance * uint256(collateralPrice)) / (10**8);
+        uint256 totalCollateralValue = (userCollateralBalance * uint256(collateralPrice)) / (10 ** 8);
 
         uint256 totalBorrowValue;
         uint256[] memory activeChains = userActiveChains[user];
 
-        for (uint i = 0; i < activeChains.length; i++) {
+        for (uint256 i = 0; i < activeChains.length; i++) {
             uint256 chainId = activeChains[i];
             TargetChainBorowInfo memory borrowInfo = crossBalances[user][chainId];
             if (borrowInfo.syncBorrowBalance > 0) {
                 int256 borrowTokenPrice = getLatestPrice(borrowInfo.borrowToken);
                 // Assuming price feed returns price with 8 decimals
-                uint256 borrowValue = (borrowInfo.syncBorrowBalance * uint256(borrowTokenPrice)) / (10**8);
+                uint256 borrowValue = (borrowInfo.syncBorrowBalance * uint256(borrowTokenPrice)) / (10 ** 8);
                 totalBorrowValue += borrowValue;
             }
         }

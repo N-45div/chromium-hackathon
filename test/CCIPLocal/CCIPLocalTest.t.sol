@@ -60,7 +60,7 @@ contract CCIPLocalTest is Test {
         (sender_collManagement, receiver_borrowManagement) =
             _initContracts(address(linkToken), address(sourceRouter), address(destinationRouter));
 
-        uint256 linkForFees = 10 ether;
+        uint256 linkForFees = 10_000 ether;
         ccipLocalSimulator.requestLinkFromFaucet(address(sender_collManagement), linkForFees);
         ccipLocalSimulator.requestLinkFromFaucet(address(receiver_borrowManagement), linkForFees);
     }
@@ -70,7 +70,7 @@ contract CCIPLocalTest is Test {
         uint256 collateralAmount = 10 ether; // Example amount, replace with actual value
         vm.startPrank(manager);
         mockCollateralWETH.mint(user1, collateralAmount);
-
+        vm.stopPrank();
         DepositCollateralInfo memory depositInfo = DepositCollateralInfo({
             collateralToken: address(mockCollateralWETH),
             amount: collateralAmount,
@@ -121,9 +121,6 @@ contract CCIPLocalTest is Test {
         // assertEq(updatedAt, 0, "Updated at should be zero in normal mode");
     }
 
-    // Blow doesn't work in local envrionment. but Approved in source chain ==> confirmBorrow in target chain can work(Approved in source chain ==> confirmBorrow in target chain)
-    // Borrow Apply in target chain ===> Approved in source chain ==> confirmBorrow in target chain
-    //
     function testBorrowApplyWithConfirmedBySourceChain() public {
         // Deposit collateral
         uint256 collateralAmount = 10 ether; // Example amount, replace with actual value
@@ -139,99 +136,19 @@ contract CCIPLocalTest is Test {
             proofA: bytes(""), // empty proof for normal mode
             commitmentHash: bytes32(0) // no commitment hash in normal mode
         });
-        uint256 startBalance = mockBorrowUSDC.balanceOf(user2_user1);
+
         vm.startPrank(user1);
         mockCollateralWETH.approve(address(sender_collManagement), collateralAmount);
 
         sender_collManagement.depositCollateral(depositInfo);
         vm.stopPrank();
 
-        vm.warp(block.timestamp + 1 days); // Advances time
-
+        uint256 startBalance = mockBorrowUSDC.balanceOf(user2_user1);
         vm.startPrank(user2_user1);
         receiver_borrowManagement.borrowApply(100e8); // 100 USDC
         vm.stopPrank();
         uint256 endBalance = mockBorrowUSDC.balanceOf(user2_user1);
         assertEq(endBalance - startBalance, 100e8, "Borrow amount not applied correctly");
-    }
-
-    function testMOCKBorrowApplyWithConfirmedBySourceChain() public {
-        uint256 borrowedAmount = 100e8; // 100 USDC
-        mockDepositCollWithEnableBorrowNormalMode(user1, user2_user1, borrowedAmount);
-        uint256 startBalance = mockBorrowUSDC.balanceOf(user2_user1);
-        mockSourceChainConfirmBorrow(
-            user1,
-            user2_user1,
-            100e8, // 100 USDC
-            bytes32(0), // no commitment hash in normal mode
-            bytes("") // no zkProof in normal mode
-        );
-        uint256 endBalance = mockBorrowUSDC.balanceOf(user2_user1);
-        assertEq(endBalance - startBalance, 100e8, "Borrow amount not applied correctly");
-
-        // uint256 borrowAmount = 100e8;
-        // vm.startPrank(user2_user1);
-        // receiver_borrowManagement.borrowApply(borrowAmount);
-        // vm.stopPrank();
-    }
-
-    function mockDepositCollWithEnableBorrowNormalMode(
-        address depositor,
-        address receiptAddress,
-        uint256 borrowedAmount
-    ) internal {
-        AvaiableBorrowBalance memory avaiableBorrowBalance = AvaiableBorrowBalance({
-            collateralToken: address(mockCollateralWETH),
-            borrowToken: address(mockBorrowUSDC),
-            initiator: depositor,
-            sourceChainId: sourceChainId,
-            pendingAmount: borrowedAmount, // this should modified when borrowApply. there  for local test
-            borrowedAmount: 0,
-            status: BorrowStatus.INITIAL,
-            proof: "",
-            updatedAt: uint64(block.timestamp)
-        });
-
-        vm.startPrank(manager);
-        sender_collManagement.setCrossBalances(
-            depositor,
-            targetChainId,
-            TargetChainBorowInfo({
-                borrowToken: address(mockBorrowUSDC),
-                recipientAddress: receiptAddress,
-                syncBorrowBalance: 0 // initial sync borrow balance
-            })
-        );
-
-        receiver_borrowManagement.setAavailableBorrowTokenBalance(receiptAddress, avaiableBorrowBalance);
-
-        vm.stopPrank();
-    }
-
-    function mockSourceChainConfirmBorrow(
-        address depositor,
-        address receiptAddress,
-        uint256 amount,
-        bytes32 commitmentHash,
-        bytes memory proof
-    ) internal {
-        // Mock the source chain confirmation of the borrow
-        CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
-            recipientAddress: receiptAddress,
-            collateralToken: address(mockCollateralWETH),
-            borrowToken: address(mockBorrowUSDC),
-            amount: amount,
-            status: BorrowStatus.BORROW_CONFIRMED_SOURCE,
-            sourceChainId: sourceChainId,
-            targetChainId: targetChainId,
-            commitmentHash: commitmentHash,
-            depositor: depositor,
-            nullifierHash: bytes32(0), // no nullifier hash in this case
-            zkProof: proof
-        });
-
-        vm.startPrank(manager);
-        sender_collManagement.borrowConfirmForTest(crossChainBorrowInfo);
     }
 
     // TODO list. the necessary test features list for hackathon
@@ -272,6 +189,7 @@ contract CCIPLocalTest is Test {
         receiver_borrowManagement = new BorrowManagement(
             address(mockBorrowUSDC), address(mockCollateralWETH), destinationRouter, address(privacyPool), linkToken
         );
+
         mockBorrowUSDC.mint(address(receiver_borrowManagement), supplyUSDCINBorrowManagement);
 
         sender_collManagement.initTargetChainParamsForCCIP(
