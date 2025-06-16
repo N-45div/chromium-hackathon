@@ -68,6 +68,7 @@ contract CCIPLocalTest is Test {
     function testDepositCollWithEnableBorrowNormalMode() public {
         // Deposit collateral
         uint256 collateralAmount = 10 ether; // Example amount, replace with actual value
+        vm.startPrank(manager);
         mockCollateralWETH.mint(user1, collateralAmount);
 
         DepositCollateralInfo memory depositInfo = DepositCollateralInfo({
@@ -126,6 +127,7 @@ contract CCIPLocalTest is Test {
     function testBorrowApplyWithConfirmedBySourceChain() public {
         // Deposit collateral
         uint256 collateralAmount = 10 ether; // Example amount, replace with actual value
+        vm.startPrank(manager);
         mockCollateralWETH.mint(user1, collateralAmount);
 
         DepositCollateralInfo memory depositInfo = DepositCollateralInfo({
@@ -239,9 +241,10 @@ contract CCIPLocalTest is Test {
         returns (CollManagement sender_collManagement, BorrowManagement receiver_borrowManagement)
     {
         // initialize CollManagement
+        vm.startPrank(manager);
         mockCollateralWETH = new MockERC20("Mock Collateral ETH", "mETH");
         mockBorrowUSDC = new MockERC20("Mock Borrow USDC", "mUSDC");
-
+        vm.stopPrank();
         // mock V3 Aggregators for price feeds
         mockV3AggregatorCollateralWETH = new MockV3Aggregator(18, 2000 * 10 ** 18); // Mock price for WETH
         mockV3AggregatorBorrowUSDC = new MockV3Aggregator(8, 1 * 10 ** 8); // Mock price for USDC
@@ -249,7 +252,6 @@ contract CCIPLocalTest is Test {
         privacyPool = new PrivacyPool(20, address(0));
 
         vm.startPrank(manager);
-
         //   uint64 _targetChainSelector,
         // address _targerChainBorrowManager
 
