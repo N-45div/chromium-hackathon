@@ -35,6 +35,11 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
     mapping(address => SupportCollInfo) public supportCollInfo; // the config for collateral
     mapping(address => mapping(address => uint256)) public collateralBalances;
     mapping(address => mapping(uint256 => TargetChainBorowInfo)) public crossBalances; // user => targetChainId => target borrow info
+    address public supportedCollateralToken;
+    mapping(address => uint256[]) public userActiveChains; // user => array of targetChainIds
+    mapping(address => mapping(uint256 => bool)) private _hasActiveChain; // user => targetChainId => bool
+    address[] public depositors;
+    mapping(address => bool) private isDepositor;
 
     event CollateralDeposited(address indexed user, address indexed collateralToken, uint256 amount);
     // This event includes two types: nomal/private deposit and deposit with enable borrow
@@ -79,6 +84,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         address _privacyPool,
         address _linkToken
     ) Ownable(msg.sender) CCIPReceiver(_rounter) {
+        supportedCollateralToken = _collateralToken;
         // initialize the support collateral config
         SupportCollInfo memory info = SupportCollInfo({
             collateralToken: _collateralToken,
@@ -137,11 +143,21 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
 
         IERC20(depositInfo.collateralToken).safeTransferFrom(msg.sender, address(this), depositInfo.amount);
         collateralBalances[msg.sender][depositInfo.collateralToken] += depositInfo.amount;
+
+        if (!isDepositor[msg.sender]) {
+            isDepositor[msg.sender] = true;
+            depositors.push(msg.sender);
+        }
         crossBalances[msg.sender][depositInfo.targetChainId] = TargetChainBorowInfo({
             borrowToken: depositInfo.borrowToken,
             recipientAddress: depositInfo.recipientAddress,
             syncBorrowBalance: 0
         });
+
+        if (!_hasActiveChain[msg.sender][depositInfo.targetChainId]) {
+            _hasActiveChain[msg.sender][depositInfo.targetChainId] = true;
+            userActiveChains[msg.sender].push(depositInfo.targetChainId);
+        }
 
         emit CollateralDeposited(msg.sender, depositInfo.collateralToken, depositInfo.amount);
 
@@ -424,5 +440,43 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         onlyOwner
     {
         crossBalances[user][targetChainId] = targetChainBorowInfo;
+    }
+
+    function getDepositors() external view returns (address[] memory) {
+        return depositors;
+    }
+
+    function isLiquidatable(address user) external view returns (bool) {
+        uint256 userCollateralBalance = collateralBalances[user][supportedCollateralToken];
+        if (userCollateralBalance == 0) {
+            return false; // No collateral, nothing to liquidate
+        }
+
+        // Assuming price feed returns price with 8 decimals
+        int256 collateralPrice = getLatestPrice(supportedCollateralToken);
+        uint256 totalCollateralValue = (userCollateralBalance * uint256(collateralPrice)) / (10**8);
+
+        uint256 totalBorrowValue;
+        uint256[] memory activeChains = userActiveChains[user];
+
+        for (uint i = 0; i < activeChains.length; i++) {
+            uint256 chainId = activeChains[i];
+            TargetChainBorowInfo memory borrowInfo = crossBalances[user][chainId];
+            if (borrowInfo.syncBorrowBalance > 0) {
+                int256 borrowTokenPrice = getLatestPrice(borrowInfo.borrowToken);
+                // Assuming price feed returns price with 8 decimals
+                uint256 borrowValue = (borrowInfo.syncBorrowBalance * uint256(borrowTokenPrice)) / (10**8);
+                totalBorrowValue += borrowValue;
+            }
+        }
+
+        if (totalBorrowValue == 0) {
+            return false; // No debt, cannot be liquidated
+        }
+
+        uint256 requiredCollateralRatio = supportCollInfo[supportedCollateralToken].collateralRatio; // This is a percentage, e.g., 150
+
+        // This checks if: (totalCollateralValue / totalBorrowValue) < (requiredCollateralRatio / 100)
+        return totalCollateralValue * 100 < totalBorrowValue * requiredCollateralRatio;
     }
 }
