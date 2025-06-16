@@ -11,17 +11,6 @@ struct DepositCollateralInfo {
     bytes32 commitmentHash;
 }
 
-struct CrossChainBorrowInfo {
-    address recipientAddress; // zero address means no specify
-    address collateralToken;
-    address borrowToken;
-    uint256 sourceChainId; // for refeence, if needed
-    uint256 targetChainId; // for refeence, if needed
-    bytes32 commitmentHash; // linking to the private balance/deposit
-    bytes32 nullifierHash; //  for spend authorization, especially when Source confirms a borrow
-    bytes zkProof;
-}
-
 // TODO, below how to integrate with privacy mode
 struct TargetChainBorowInfo {
     address borrowToken;
@@ -49,10 +38,4 @@ interface ICollManagement {
     function withdrawCollateral(address collateralToken, uint256 amount) external;
 
     function liquidateCollateral(address collateralToken, address user) external;
-
-    // query the available borrow balance on the target chain for the specified borrow token
-    function getAvaiableChainBorrowBalance(address user, uint8 targetChainId, address borrowToken)
-        external
-        view
-        returns (uint256);
 }
