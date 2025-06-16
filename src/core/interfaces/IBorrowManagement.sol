@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {CrossChainBorrowInfo} from "src/core/interfaces/ICollManagement.sol";
+
 enum BorrowStatus {
     NONE,
     INITIAL,
@@ -40,4 +42,7 @@ interface IBorrowManagement {
 
     function repay(uint256 amount) external;
     function repay(uint256 amount, bytes32 commitmentHash, bytes calldata proof) external;
+
+    // Called by source-chain CollManagement via CCIP (or directly in tests) to initialise borrow parameters on target chain.
+    function borrowInitial(CrossChainBorrowInfo memory crossChainBorrowInfo) external;
 }

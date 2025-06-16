@@ -24,13 +24,14 @@ import {
     CrossChainBorrowInfo
 } from "src/core/interfaces/ICollManagement.sol";
 
+import {IBorrowManagement} from "src/core/interfaces/IBorrowManagement.sol";
+
 import {PrivacyPool} from "src/core/privacy/PrivacyPool.sol";
 
 contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Ownable {
     using SafeERC20 for IERC20;
 
     address private immutable privacyPool;
-    address private immutable linkToken; //now use link pay for the fees
     mapping(address => SupportCollInfo) public supportCollInfo; // the config for collateral
     mapping(address => mapping(address => uint256)) public collateralBalances;
     mapping(address => mapping(uint256 => TargetChainBorowInfo)) public crossBalances; // user => targetChainId => target borrow info
@@ -66,7 +67,6 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         address collateralToken, uint256 amount, address borrowToken, uint256 borrowdBalance
     );
 
-    // TODO optimize how to initialize CCIP related params
     constructor(
         address _collateralToken,
         address _collateralTokenPriceFeed,
@@ -74,21 +74,21 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         address _borrowTokenPriceFeed,
         uint256 _collateral_ratio,
         uint256 _targetChainId,
-        address _rounter,
+        address _destionChainRounter,
         address _privacyPool,
-        address _linkToken
-    ) Ownable(msg.sender) CCIPReceiver(_rounter) {
+        uint64 _targetChainSelector,
+        address _targerChainBorrowManager
+    ) Ownable(msg.sender) CCIPReceiver(_destionChainRounter) {
         // initialize the support collateral config
         SupportCollInfo memory info = SupportCollInfo({
             collateralToken: _collateralToken,
             collateralRatio: _collateral_ratio,
             targetChainId: _targetChainId,
-            targerChainBorrowManager: address(0),
+            targetChainSelector: _targetChainSelector,
+            targerChainBorrowManager: _targerChainBorrowManager,
             borrowToken: _borrowToken,
-            targetChainSelector: 0,
             isSupported: true
         });
-
         supportCollInfo[_collateralToken] = info;
 
         // initialize the realted price feeds for collateral and borrow token
@@ -96,7 +96,25 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         priceFeeds[_borrowToken] = AggregatorV3Interface(_borrowTokenPriceFeed);
 
         privacyPool = _privacyPool;
-        linkToken = _linkToken;
+    }
+
+    /**
+     * @notice Initialize cross-chain parameters for a supported collateral token. Can only be called by the contract owner.
+     * @param collateralToken The address of the collateral token that has already been added to `supportCollInfo`.
+     * @param _targerChainBorrowManager The address of the `BorrowManagement` (or any cross-chain borrow manager) on the target chain.
+     * @param _targetChainSelector The Chainlink CCIP chain selector corresponding to the target chain.
+     */
+    function initTargetChainParamsForCCIP(
+        address collateralToken,
+        address _targerChainBorrowManager,
+        uint64 _targetChainSelector
+    ) external onlyOwner {
+        if (!supportCollInfo[collateralToken].isSupported) {
+            revert UnsupportedCollToken(collateralToken);
+        }
+        SupportCollInfo storage info = supportCollInfo[collateralToken];
+        info.targerChainBorrowManager = _targerChainBorrowManager;
+        info.targetChainSelector = _targetChainSelector;
     }
 
     // Just deposit collateral without specific borrow token in target chain
@@ -137,27 +155,13 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
 
         IERC20(depositInfo.collateralToken).safeTransferFrom(msg.sender, address(this), depositInfo.amount);
         collateralBalances[msg.sender][depositInfo.collateralToken] += depositInfo.amount;
-        crossBalances[msg.sender][depositInfo.targetChainId] = TargetChainBorowInfo({
-            borrowToken: depositInfo.borrowToken,
-            recipientAddress: depositInfo.recipientAddress,
-            syncBorrowBalance: 0
-        });
 
         emit CollateralDeposited(msg.sender, depositInfo.collateralToken, depositInfo.amount);
 
-        // Pack the cross-chain borrow info to send to the target chain
-        CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
-            recipientAddress: depositInfo.recipientAddress,
-            collateralToken: depositInfo.collateralToken,
-            borrowToken: depositInfo.borrowToken,
-            sourceChainId: block.chainid, // current chain id
-            targetChainId: depositInfo.targetChainId,
-            commitmentHash: depositInfo.commitmentHash,
-            nullifierHash: 0, // should be set when the source chain confirms the borrow
-            zkProof: depositInfo.proofA
-        });
-        // CCIP send message to the target chain
-        _sendMessage(depositInfo.collateralToken, abi.encode(crossChainBorrowInfo));
+        // Implementation for depositing collateral with target chain selection
+        // todo CCIP message for the target chain
+        bytes memory extraArgs = "0x";
+        _sendMessage(depositInfo, extraArgs);
     }
 
     function withdrawCollateral(address collateralToken, uint256 amount) external {
@@ -196,7 +200,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         // TODO, the profit liquidator can get
     }
 
-    function getAvaiableChainBorrowBalance(address, /*user*/ uint8, /*targetChainId*/ address /*borrowToken*/ )
+    function getAvaiableChainBorrowBalance(address user, uint8 targetChainId, address borrowToken)
         external
         view
         override
@@ -208,96 +212,88 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         return 0;
     }
 
-    // return the max market value can be withdraw for collateralToken or borrow for borrowToken
+    // Reverts if ratio falls below required level.
     function validcollateralRatio(address collateralToken, uint256 amount, address borrowToken, uint256 borrowedAmount)
         internal
         view
         returns (uint256)
     {
-        int256 collateralPrice = getLatestPrice(collateralToken);
+        uint256 collateralPrice = _scalePrice(getLatestPrice(collateralToken));
+        uint256 borrowPrice = _scalePrice(getLatestPrice(borrowToken));
 
-        int256 borrowPrice = getLatestPrice(borrowToken);
+        uint256 requiredRatio = supportCollInfo[collateralToken].collateralRatio;
 
-        uint256 COLLATERAL_RATIO = supportCollInfo[collateralToken].collateralRatio;
-
-        if (
-            ((uint256(collateralPrice) * amount * 1e18) / (uint256(borrowPrice) * borrowedAmount * 1e10 * 1e10))
-                <= COLLATERAL_RATIO
-        ) {
+        uint256 current = (collateralPrice * amount) * 1e18 / (borrowPrice * borrowedAmount);
+        if (current <= requiredRatio) {
             revert NoStatisfyCollateralRatio(collateralToken, amount, borrowToken, borrowedAmount);
         }
 
-        return uint256(collateralPrice) * amount * COLLATERAL_RATIO / (uint256(borrowPrice) * borrowedAmount);
+        return (collateralPrice * amount * requiredRatio) / (borrowPrice * borrowedAmount);
     }
 
-    /**
-     * Below function responds to the borrowApply/repay(both also involved the privacy mode) from the target chain.
-     *
-     * Check process
-     *
-     * 1) check data formart (CrossChainBorrowInfo)
-     * 2) check respond which type
-     *  1) borrowApply 2) borrowApply(Provacy) 3) repay 4) repay(Privacy)
-     *
-     * 3) The logic for each type
-     *   1. borrowApply: check whether or not  the user's collateral ratio is health, if valid, then update crossBalances[msg.sender][targetChain].syncBorrowBalance.
-     * Then call borrowApprovedAndTransfer in target chain by CCIP message.
-     * TODO considering add new BorrowStatus, which should shows the source's chain's confirmation status
-     *   2. repay: same logic, alothough validate collateral ratio seems unnecessary, keep the logic consistent with borrowApply seems better.
-     *   3. borrowApply(Provacy):
-     *
-     * As Sektorial12 mentioned(as below), which means the logic checking commitmentHash and their orginal depositor's address belongs to the PrivacyPool contract
-     *
-     * The user's collateral balance on the Source Chain (crossBalances) is always tied to their address. The link between this address and the commitmentHash is established
-     * and managed within the Source Chain's PrivacyPool during the private deposit. This ensures liquidations on the source are always against the actual depositor's address, regardless of borrow privacy on the target.
-     * https://github.com/N-45div/chromium-hackathon/issues/4#issuecomment-2966105941
-     *
-     *
-     * So the withdrawCollateral and liquidateCollateral during the  privacy mode should check privacy borrow in target chain
-     *
-     *   4. repay(Privacy): TODO chekck
-     *
-     * 4) Define the communication rules for cross-chain borrowApply/repay for this function. (normal/privacy mode)
-     *    borrowApply in target chain, update  BorrowStatus.BORROW_PENDING_SOURCE_CONFIRMATION.
-     *          ==> curret funciton in source chain BorrowStatus.BORROW_CONFIRMED_SOURCE_CONFIRMATION.
-     *          ==> borrowApprovedAndTransfer in target chain  BorrowStatus.BORROW_APPROVED
-     *
-     *   repay in target chain, update BorrowStatus.REPAY_PENDING_SOURCE_CONFIRMATION.
-     *          ==> curret funciton in source chain BorrowStatus.REPAY_CONFIRMED_SOURCE_CONFIRMATION
-     *          ==> repayConfirm in target chain  BorrowStatus.REPAY_CONFIRMED
-     *
-     *
-     */
-    function confirmTargetChainStatus(CrossChainBorrowInfo memory crossChainBorrowInfo) external {}
+    // This function is triggered (via CCIP) by the target-chain BorrowManagement
+    // contract once a borrow *or* repay action has been finalised on the target
+    // chain. The payload tells us which position to update and the *new* synced
+    // borrow balance after the action. We then re-validate the collateral ratio
+    // on the source chain and persist the new balance.
+    function confirmTargetChainStatus(CrossChainBorrowInfo memory crossChainBorrowInfo) external {
+        
+        require(crossChainBorrowInfo.zkProof.length >= 32, "Coll: invalid payload");
+        uint256 newSyncBorrowBalance = abi.decode(crossChainBorrowInfo.zkProof, (uint256));
 
-    // TODO, implement support different chains
-    /// @notice Returns the real-time collateral ratio (scaled by 1e18) for a user.
-    /// Formula:
-    ///     (collateralPrice * collateralAmount) / (borrowPrice * borrowedAmount)
-    /// All token amounts are normalised to 18 decimals to make the ratio comparable
-    /// across assets with different ERC-20 decimals.
+    
+        bool isPrivacy = crossChainBorrowInfo.commitmentHash != bytes32(0);
+        if (isPrivacy) {
+            require(
+                !PrivacyPool(privacyPool).nullifiers(crossChainBorrowInfo.nullifierHash),
+                "Coll: nullifier already spent"
+            );
+        }
+
+    
+        uint256 userCollateral = collateralBalances[crossChainBorrowInfo.recipientAddress][
+            crossChainBorrowInfo.collateralToken
+        ];
+
+        // Will revert,if ratio not satisfied
+        validcollateralRatio(
+            crossChainBorrowInfo.collateralToken,
+            userCollateral,
+            crossChainBorrowInfo.borrowToken,
+            newSyncBorrowBalance
+        );
+
+        if (isPrivacy) {
+            PrivacyPool(privacyPool).markNullifier(crossChainBorrowInfo.nullifierHash);
+        }
+
+        crossBalances[crossChainBorrowInfo.recipientAddress][crossChainBorrowInfo.targetChainId]
+            .syncBorrowBalance = newSyncBorrowBalance;
+
+        emit SyncBorrowBalanceUpdated(
+            crossChainBorrowInfo.recipientAddress,
+            crossChainBorrowInfo.collateralToken,
+            crossChainBorrowInfo.targetChainId,
+            crossChainBorrowInfo.borrowToken,
+            newSyncBorrowBalance
+        );
+    }
+
+    // Returns the live collateral ratio (1e18 scale).
     function userCollateralRatio(address user, address collateralToken, address borrowToken)
         external
         view
         returns (uint256)
     {
-        // 1. Fetch on-chain prices (8 decimals from Chainlink feeds)
-        int256 collateralPrice = getLatestPrice(collateralToken); // 8 decimals
-        int256 borrowPrice = getLatestPrice(borrowToken); // 8 decimals
+        uint256 collateralPrice = _scalePrice(getLatestPrice(collateralToken));
+        uint256 borrowPrice = _scalePrice(getLatestPrice(borrowToken));
 
-        // 2. Resolve the *synced* borrow balance for the target chain that this
-        //    collateralToken maps to (in the simplified hackathon design each
-        //    collateral only supports one target chain).
         uint256 targetChain = supportCollInfo[collateralToken].targetChainId;
         uint256 borrowedAmount = crossBalances[user][targetChain].syncBorrowBalance;
 
-        // Edge-case: if nothing has been borrowed yet, the ratio is infinite.
         if (borrowedAmount == 0) return type(uint256).max;
 
         uint256 collateralAmount = collateralBalances[user][collateralToken];
-
-        // 3. Normalise token amounts to 18 decimals so price*amount math stays
-        //    consistent regardless of ERC-20 decimals.
         uint8 collDec = IERC20Metadata(collateralToken).decimals();
         uint8 borrowDec = IERC20Metadata(borrowToken).decimals();
 
@@ -312,61 +308,49 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         else if (borrowDec < 18) borrowNorm = borrowedAmount * (10 ** uint256(18 - borrowDec));
         else borrowNorm = borrowedAmount / (10 ** uint256(borrowDec - 18));
 
-        // 4. Compute and return the ratio (scale = 1e18 for extra precision).
-        //    Prices have 8 decimals, so we multiply numerator by 1e8 to balance.
-        return (uint256(collateralPrice) * collateralNorm) * 1e18 / (uint256(borrowPrice) * borrowNorm);
+        return (collateralPrice * collateralNorm) * 1e18 / (borrowPrice * borrowNorm);
     }
 
-    function initTargetChainParamsForCCIP(
-        address collateralToken,
-        address targerChainBorrowManager,
-        uint64 targetChainSelector
-    ) external onlyOwner {
-        if (!supportCollInfo[collateralToken].isSupported) {
-            revert UnsupportedCollToken(collateralToken);
-        }
-
-        supportCollInfo[collateralToken].targerChainBorrowManager = targerChainBorrowManager;
-        // targetChainSelector fixed value for chainlink ccip
-        supportCollInfo[collateralToken].targetChainSelector = targetChainSelector;
-    }
-
-    // For now, we just support 1=>1 format, user deposit one collateralToken and can only borrow one borrowToken in target chain
-    function _sendMessage(address collateralToken, bytes memory data) internal returns (bytes32 messageId) {
-        address receiver = supportCollInfo[collateralToken].targerChainBorrowManager;
-        uint64 destinationChainSelector = supportCollInfo[collateralToken].targetChainSelector;
-
-        Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver: abi.encode(receiver),
-            data: data,
-            tokenAmounts: new Client.EVMTokenAmount[](0), // only send message without token transfer
-            extraArgs: "",
-            feeToken: linkToken
+    function _sendMessage(DepositCollateralInfo memory depositInfo, bytes memory extraBytes) internal {
+        crossBalances[msg.sender][depositInfo.targetChainId] = TargetChainBorowInfo({
+            borrowToken: depositInfo.borrowToken,
+            recipientAddress: depositInfo.recipientAddress,
+            syncBorrowBalance: 0
         });
 
-        // Initialize a router client instance to interact with cross-chain router
-        // CHECKING ........................
-        IRouterClient router = IRouterClient(getRouter());
-        // CHECKING ........................
+        CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
+            recipientAddress: depositInfo.recipientAddress,
+            collateralToken: depositInfo.collateralToken,
+            borrowToken: depositInfo.borrowToken,
+            sourceChainId: block.chainid, // current chain id
+            targetChainId: depositInfo.targetChainId,
+            commitmentHash: depositInfo.commitmentHash,
+            nullifierHash: 0, // should be set when the source chain confirms the borrow
+            zkProof: depositInfo.proofA
+        });
+        // In production this would be sent via CCIP. For local testing we directly invoke the
+        // target-chain BorrowManagement to bootstrap its state, if the address is configured.
+        address targetBorrowMgr = supportCollInfo[depositInfo.collateralToken].targerChainBorrowManager;
+        if (targetBorrowMgr != address(0)) {
+            // solhint-disable-next-line avoid-low-level-calls
+            IBorrowManagement(targetBorrowMgr).borrowInitial(crossChainBorrowInfo);
+        }
+        // CCIP(crossChainBorrowInfo) borrowInitial
 
-        uint256 fee = IRouterClient(router).getFee(destinationChainSelector, message);
-        IERC20(linkToken).approve(address(router), fee);
-
-        messageId = IRouterClient(router).ccipSend(destinationChainSelector, message);
-
-        // TODO based on messageId. emit or integrate with front-end AI
+        emit CollateralDepositedWithEnableBorrow(
+            msg.sender,
+            depositInfo.commitmentHash,
+            depositInfo.collateralToken,
+            depositInfo.amount,
+            depositInfo.borrowToken,
+            depositInfo.targetChainId,
+            supportCollInfo[depositInfo.collateralToken].collateralRatio
+        );
     }
 
     // When borrower borrows the token on the target chain, this function will be called By the CCIP message
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
         DepositCollateralInfo memory depositInfo = abi.decode(message.data, (DepositCollateralInfo));
-
-        // sync check the  COLLATERAL_RATIO for source chain
-        // collateralToken's price * amount / borrowToken's price * borrowBalance > collateralRatio
-        // return false? inform front-end AI. trigger the source chain: this user can't borrow the token
-        // TODO decode the message
-        // revert SyncBorrowRatioFail(depositInfo.collateralToken, depositInfo.borrowToken, depositInfo.amount);
-
         // update the user's syncBorrowBalance in source chain
         address depositUser = address(0x01); // todo, get the corrosponding deposit user
 
@@ -383,5 +367,22 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             depositInfo.borrowToken,
             0 // // should update
         );
+    }
+
+    // below funciton aim for mock test, should delete when deploy to mainnet
+    // Scale Chainlink price (8 decimals) to 18.
+    function _scalePrice(int256 price) internal pure returns (uint256) {
+        require(price > 0, "Invalid price");
+        return uint256(price) * 1e10;
+    }
+
+    function setCrossBalances(address user, address borrowToken, uint256 targetChainId, uint256 borrowedBalance)
+        public
+    {
+        crossBalances[user][targetChainId] = TargetChainBorowInfo({
+            borrowToken: borrowToken,
+            recipientAddress: address(0),
+            syncBorrowBalance: borrowedBalance
+        });
     }
 }
