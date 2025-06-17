@@ -412,6 +412,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
 
         // According to status: logic switch TOOD Add more related logic
         if (status == BorrowStatus.BORROW_PENDING_TARGET) {
+            // Temp add for fork test
             borrowApplyConfirm(crossChainBorrowInfo);
             // TODO below test just for roundTest
         }
@@ -454,5 +455,11 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
 
         // This checks if: (totalCollateralValue / totalBorrowValue) < (requiredCollateralRatio / 100)
         return totalCollateralValue * 100 < totalBorrowValue * requiredCollateralRatio;
+    }
+
+    // For link gas usage
+    function transferLinkToken(address to, uint256 amount) external onlyOwner {
+        // Allow the owner to withdraw LINK tokens from the contract
+        IERC20(linkToken).transfer(to, amount);
     }
 }

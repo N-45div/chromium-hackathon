@@ -309,10 +309,10 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
         CrossChainBorrowInfo memory crossChainBorrowInfo = abi.decode(message.data, (CrossChainBorrowInfo));
 
         // TODO, should emit the related event?
-        require(
-            supportBorrowCollTokenInfo[crossChainBorrowInfo.borrowToken].isSupported,
-            "Unsupported collateral token for borrow"
-        );
+        // require(
+        //     supportBorrowCollTokenInfo[crossChainBorrowInfo.borrowToken].isSupported,
+        //     "Unsupported collateral token for borrow"
+        // );
 
         (bool isPrivacyMode, BorrowStatus status) = crossChainBorrowInfo.checkModeAndStatus();
 
@@ -326,6 +326,7 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     }
 
     // For now, we just support 1=>1 format, user deposit one collateralToken and can only borrow one borrowToken in target chain
+
     function _sendMessage(address borrowToken, bytes memory data) internal returns (bytes32 messageId) {
         address sourceChainCollManager = supportBorrowCollTokenInfo[borrowToken].sourceChainCollManager;
         uint64 sourceChainSelector = supportBorrowCollTokenInfo[borrowToken].sourceChainSelector;
@@ -352,13 +353,17 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
         // CHECKING ........................
         IRouterClient router = IRouterClient(getRouter());
         // CHECKING ........................
-
         uint256 fee = IRouterClient(router).getFee(sourceChainSelector, message);
         IERC20(linkToken).approve(address(router), fee);
 
         messageId = IRouterClient(router).ccipSend(sourceChainSelector, message);
-
         // TODO based on messageId. emit or integrate with front-end AI
     }
     /////////////////////////////////////////////////////////////////////////////// CCIP  ///////////////////////////////////////////////////////////////////////////////
+
+    // For link gas usage
+    function transferLinkToken(address to, uint256 amount) external onlyOwner {
+        // Allow the owner to withdraw LINK tokens from the contract
+        IERC20(linkToken).transfer(to, amount);
+    }
 }
