@@ -77,6 +77,12 @@ forge script ./script/DeployContracts.s.sol:SetRouterForStratoLendNetWorkForTarg
    user have the Colletral Token which was supported by the CollManagement
 
 ```
+1. address sender_collManagement
+2. address mockCollateralWETH,
+3. uint256 collateralAmount,
+4. uint256 targetChainId,
+5. address mockBorrowUSDC,
+6. address recipient_by_depositor
 forge script ./script/DeployContracts.s.sol:DepositCollateral -vvv --broadcast --rpc-url <rpc-url>  --sig "run(address,address,uint256,uint256,address,address)" -- 0x74ea849ba30b0a8ea2b749bb662516935331492c 0xb8F551189a9E15988C05EA29d4e3Cf8e39eD6BFE  100000000000000000 43113 0x8c30c02cbdd4264f458a2083d3cc188c0fd0c3f5 0xea2f3b9cdb2B68297441c176F38ac2ec3926e0b8
 
 ```
@@ -127,3 +133,7 @@ For example
 2. Check the necessary features, which can be work in test net or the need data.
    2.1 ColletralRatio check
    More can add
+3. Checklist
+   3.1 user have native tokne in fuji (avax)
+   3.2 borrowManagement/CollManagement have link token(pay fees)
+   3.3 borrowManagement have enough borrowUSDC
