@@ -4,7 +4,6 @@ out/
 .vscode/
 .env
 .encryptedKey
-broadcast/
 
 node_modules
 package-lock.json
