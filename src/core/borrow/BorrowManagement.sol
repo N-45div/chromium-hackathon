@@ -26,6 +26,7 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     address public immutable BORROW_USDC; // the only borrow token supported now
     address private immutable privacyPool;
     address private immutable linkToken; //now use link pay for the fees
+    uint256 private dynamaticGasLimit = 2_999_999; // gas limit for the CCIP message, should be adjusted based on the target chain
 
     mapping(address => SupportBorrowCollTokenInfo) public supportBorrowCollTokenInfo; // TOOD chek supportBorrowCollTokenInfo is compatible with other components
     mapping(address => AvaiableBorrowBalance) public availableBorrowTokenBalance; // for borrow token, current only support USDC
@@ -341,7 +342,8 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
                 // where you set the extra arguments off-chain. This allows adaptation depending on the lanes, messages,
                 // and ensures compatibility with future CCIP upgrades. Read more about it here: https://docs.chain.link/ccip/concepts/best-practices/evm#using-extraargs
                 Client.GenericExtraArgsV2({
-                    gasLimit: 9_000_000, // Gas limit for the callback on the destination chain
+                    // fuji max gaslimit is 3_000_000
+                    gasLimit: dynamaticGasLimit, // Gas limit for the callback on the destination chain
                     allowOutOfOrderExecution: true // Allows the message to be executed out of order relative to other messages from the same sender
                 })
             ),
@@ -361,9 +363,14 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable {
     }
     /////////////////////////////////////////////////////////////////////////////// CCIP  ///////////////////////////////////////////////////////////////////////////////
 
-    // For link gas usage
+    // For link gas usage, just for hackathon, not for real production use
     function transferLinkToken(address to, uint256 amount) external onlyOwner {
         // Allow the owner to withdraw LINK tokens from the contract
         IERC20(linkToken).transfer(to, amount);
+    }
+
+    function setGasLimit(uint256 _gasLimit) external onlyOwner {
+        // Allow the owner to set the gas limit for CCIP messages
+        dynamaticGasLimit = _gasLimit;
     }
 }

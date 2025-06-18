@@ -59,7 +59,7 @@ https://sepolia.etherscan.io/tx/0x8e8e136ca15cca0948188c3b139f019bc09ac99bee0510
 
 ```
 
-forge script ./script/DeployContracts.s.sol:SetRouterForStratoLendNetWorkForSource -vvv --broadcast --rpc-url <rpc-url>  --sig "run(address,address,address,uint256)" -- 0x74ea849ba30b0a8ea2b749bb662516935331492c 0xfa12b0c5af2d60a4748f4038163854e8faad26d8 0xb8F551189a9E15988C05EA29d4e3Cf8e39eD6BFE 43113
+forge script ./script/DeployContracts.s.sol:SetRouterForStratoLendNetWorkForSource -vvv --broadcast --rpc-url <rpc-url>  --verify --verifier etherscan --etherscan-api-key <etherscan-api-key> --sig "run(address,address,address,uint256)" -- 0x74ea849ba30b0a8ea2b749bb662516935331492c 0xfa12b0c5af2d60a4748f4038163854e8faad26d8 0xb8F551189a9E15988C05EA29d4e3Cf8e39eD6BFE 43113
 
 ```
 
@@ -93,14 +93,14 @@ forge script ./script/DeployContracts.s.sol:DepositCollateral -vvv --broadcast -
 forge script ./script/DeployContracts.s.sol:BorrowApply -vvv --broadcast --rpc-url <rpc-url>  --sig "run(address,uint256)" -- 0xfa12b0c5af2d60a4748f4038163854e8faad26d8 10000000000
 ```
 
-## Deploy address
+## Deployed address
 
-[privacyPool in sepolia](https://sepolia.etherscan.io/address/0x6cb13dce38690d4ab49d17416c1df23cc811d5a5#code)
-[CollateralWETH in sepolia](https://sepolia.etherscan.io/address/0xb8F551189a9E15988C05EA29d4e3Cf8e39eD6BFE#code)
-[CollManagement in sepolia](https://sepolia.etherscan.io/address/0x74ea849ba30b0a8ea2b749bb662516935331492c#code)
-[privacyPool in fuji](https://testnet.snowtrace.io/address/0x64D392194d45727c061684c394035CfF240480D1/contract/43113/code)
-[borrowUsdc in fuji](https://testnet.snowtrace.io/address/0x8c30c02cbdd4264f458a2083d3cc188c0fd0c3f5)
-[BorrowManagement in fuji](https://testnet.snowtrace.io/address/0xfa12b0c5af2d60a4748f4038163854e8faad26d8)
+1. [privacyPool in sepolia](https://sepolia.etherscan.io/address/0x6cb13dce38690d4ab49d17416c1df23cc811d5a5#code)
+2. [CollateralWETH in sepolia](https://sepolia.etherscan.io/address/0xb8F551189a9E15988C05EA29d4e3Cf8e39eD6BFE#code)
+3. [CollManagement in sepolia](https://sepolia.etherscan.io/address/0x74ea849ba30b0a8ea2b749bb662516935331492c#code)
+4. [privacyPool in fuji](https://testnet.snowtrace.io/address/0x64D392194d45727c061684c394035CfF240480D1/contract/43113/code)
+5. [borrowUsdc in fuji](https://testnet.snowtrace.io/address/0x8c30c02cbdd4264f458a2083d3cc188c0fd0c3f5)
+6. [BorrowManagement in fuji](https://testnet.snowtrace.io/address/0xa41c8cff6d66798151ff6bcb8d711f1d135a52ed)
 
 Chink related CCIP address can check [Helper](script/Helper.sol), which include linkAddress, chainSelector, router address in different chains. current support sepolia(source chain)/fuji(target chain)
 
@@ -119,21 +119,43 @@ For example
 1. For now. all these contract's owner is 0xf101cEFc8AeCE4c5D2672d54FD7392F8255052ed, who can want to mint CollateralWETH in sepolia can inform me.
 2. The borrowUsdc's supply by the address 0xf101cEFc8AeCE4c5D2672d54FD7392F8255052ed, if neeed I will mint more usdc as needed in Fuji net
 
+## ABI File generate
+
+```
+sourceChainId = 11155111; // Ethereum Sepolia
+targetChainId = 43113; // Avalanche Fuji Testnet
+
+jq '{chainID: 11155111, abi: .abi }' out/CollManagement.sol/CollManagement.json > script/abi/CollManagement_11155111.json
+
+jq '{chainID: 43113, abi: .abi }' out/BorrowManagement.sol/BorrowManagement.json > script/abi/BorrowManagement_43113.json
+
+
+```
+
 ## Problems
 
 1. how to build the relationships between Colletral Token and borrowUSDC token across source and target chain
    Current desgin assume borrowUSDC are same in different chains. Actually they are not equal. Now, just Colletral Token in souce chain and borrow token in target chain
 2. Can make privacyPool mutable, which fit for our test.
 3. BorrowApply work in chainlink CCIP local test, but can't work by forking test or the test net. One reason current konow is fuji don't support sepolia's chainSelector by using forking(the RPC I used seems can't get the latest block.number, which can't get the latest support info), test net problem should continue to investigate.
-4.
+
+   Current status: user borrowApply in fuji chain, but CCIP seems desn't work. no more clues why Ethereum Sepolia chain not work. (related logic is borrowConfirm and call ccip send again). now can ensure fuji chian's borrower's status was updated while Sepolia chain's crossbalance doesn't change.
+
+   related Tx:
+
+   1. [user deposit tx](https://ccip.chain.link/address/0xf101cefc8aece4c5d2672d54fd7392f8255052ed#/side-drawer/msg/0xc6fb09ecb9b22514a5b3ac88040daa91fe695e2831f7d5d6db951482f5b511f9)
+   2. [user borrow Apply](https://ccip.chain.link/address/0xea2f3b9cdb2b68297441c176f38ac2ec3926e0b8#/side-drawer/msg/0x667a96ebffe1f29107c6fda591a43d5e51883a7970228e7e26f349102ccbed5f)
 
 ## TODO
 
 1. You can based on above introduction, deployed new contracts.
 2. Check the necessary features, which can be work in test net or the need data.
+
    2.1 ColletralRatio check
    More can add
+
 3. Checklist
-   3.1 user have native tokne in fuji (avax)
-   3.2 borrowManagement/CollManagement have link token(pay fees)
-   3.3 borrowManagement have enough borrowUSDC
+
+   1. user have native tokne in fuji (avax), sepolia(eth)
+   2. borrowManagement/CollManagement have link token(pay fees)
+   3. borrowManagement have enough borrowUSDC
