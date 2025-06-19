@@ -32,6 +32,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
 
     address private immutable privacyPool;
     address private immutable linkToken; //now use link pay for the fees
+    uint256 private dynamaticGasLimit = 300_000; // gas limit for the CCIP message, should be adjusted based on the target chain
     mapping(address => SupportCollInfo) public supportCollInfo; // the config for collateral
     mapping(address => mapping(address => uint256)) public collateralBalances;
     mapping(address => mapping(uint256 => TargetChainBorowInfo)) public crossBalances; // user => targetChainId => target borrow info
@@ -306,8 +307,8 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         emit SyncBorrowBalanceUpdated(
             crossChainBorrowInfo.depositor,
             crossChainBorrowInfo.collateralToken, // This is from the CCIP message; ensure it's consistently populated.
-            crossChainBorrowInfo.targetChainId,   // The chain where the borrow occurred.
-            currentTargetBorrowInfo.borrowToken,  // The token that was borrowed.
+            crossChainBorrowInfo.targetChainId, // The chain where the borrow occurred.
+            currentTargetBorrowInfo.borrowToken, // The token that was borrowed.
             newTotalBorrowAmount
         );
 
@@ -318,29 +319,29 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
         // on the target chain, and its role is to update local debt, not send another message back for this flow.
         if (crossChainBorrowInfo.status == BorrowStatus.BORROW_PENDING_TARGET) {
             // This block executes if CollManagement received a BORROW_PENDING_TARGET message,
-            // meaning it needs to validate and then send a confirmation (BORROW_CONFIRMED_SOURCE) 
+            // meaning it needs to validate and then send a confirmation (BORROW_CONFIRMED_SOURCE)
             // to the target chain specified in the incoming crossChainBorrowInfo.targetChainId.
 
             // TODO: Add collateral ratio check here before confirming.
-            // if (!validcollateralRatio(...)) { 
+            // if (!validcollateralRatio(...)) {
             //     // Optionally send a REJECTED status message back or simply revert.
             //     revert NoStatisfyCollateralRatio(...);
             // }
 
             CrossChainBorrowInfo memory ackInfo = CrossChainBorrowInfo({
                 recipientAddress: crossChainBorrowInfo.recipientAddress, // Propagate recipient
-                collateralToken: crossChainBorrowInfo.collateralToken,   // Propagate collateral token
-                borrowToken: crossChainBorrowInfo.borrowToken,           // Propagate borrow token (token to be borrowed on target)
-                amount: crossChainBorrowInfo.amount,                     // Propagate amount
-                status: BorrowStatus.BORROW_CONFIRMED_SOURCE,            // This contract confirms the borrow from source perspective
-                sourceChainId: block.chainid,                            // This chain is the source of this confirmation message
-                targetChainId: crossChainBorrowInfo.targetChainId,       // Send to the chain that will execute/finalize the borrow
-                commitmentHash: crossChainBorrowInfo.commitmentHash,     // Propagate ZK info if present and relevant for target
-                depositor: crossChainBorrowInfo.depositor,               // Propagate original depositor
-                nullifierHash: crossChainBorrowInfo.nullifierHash,       // Propagate ZK info
-                zkProof: crossChainBorrowInfo.zkProof                    // Propagate ZK info
+                collateralToken: crossChainBorrowInfo.collateralToken, // Propagate collateral token
+                borrowToken: crossChainBorrowInfo.borrowToken, // Propagate borrow token (token to be borrowed on target)
+                amount: crossChainBorrowInfo.amount, // Propagate amount
+                status: BorrowStatus.BORROW_CONFIRMED_SOURCE, // This contract confirms the borrow from source perspective
+                sourceChainId: block.chainid, // This chain is the source of this confirmation message
+                targetChainId: crossChainBorrowInfo.targetChainId, // Send to the chain that will execute/finalize the borrow
+                commitmentHash: crossChainBorrowInfo.commitmentHash, // Propagate ZK info if present and relevant for target
+                depositor: crossChainBorrowInfo.depositor, // Propagate original depositor
+                nullifierHash: crossChainBorrowInfo.nullifierHash, // Propagate ZK info
+                zkProof: crossChainBorrowInfo.zkProof // Propagate ZK info
             });
-            
+
             // CCIP send message to the target chain that is awaiting this confirmation.
             // The collateralToken is used to find routing info via supportCollInfo.
             _sendMessage(crossChainBorrowInfo.collateralToken, abi.encode(ackInfo));
@@ -357,7 +358,17 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
             receiver: abi.encode(receiver),
             data: data,
             tokenAmounts: new Client.EVMTokenAmount[](0), // only send message without token transfer
-            extraArgs: "",
+            extraArgs: Client._argsToBytes(
+                // Additional arguments, setting gas limit and allowing out-of-order execution.
+                // Best Practice: For simplicity, the values are hardcoded. It is advisable to use a more dynamic approach
+                // where you set the extra arguments off-chain. This allows adaptation depending on the lanes, messages,
+                // and ensures compatibility with future CCIP upgrades. Read more about it here: https://docs.chain.link/ccip/concepts/best-practices/evm#using-extraargs
+                Client.GenericExtraArgsV2({
+                    gasLimit: dynamaticGasLimit, // Gas limit for the callback on the destination chain
+                    allowOutOfOrderExecution: true // Allows the message to be executed out of order relative to other messages from the same sender
+                })
+            ),
+            // extraArgs: "",
             feeToken: linkToken
         });
 
@@ -477,5 +488,10 @@ contract CollManagement is ICollManagement, CCIPReceiver, PriceFeedConsumer, Own
     function transferLinkToken(address to, uint256 amount) external onlyOwner {
         // Allow the owner to withdraw LINK tokens from the contract
         IERC20(linkToken).transfer(to, amount);
+    }
+
+    function setGasLimit(uint256 _gasLimit) external onlyOwner {
+        // Allow the owner to set the gas limit for CCIP messages
+        dynamaticGasLimit = _gasLimit;
     }
 }

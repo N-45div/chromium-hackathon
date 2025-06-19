@@ -111,7 +111,7 @@ contract DeployCollManagementSender is Script, Helper {
     }
 }
 
-// https://testnet.snowtrace.io/address/0xfa12b0c5af2d60a4748f4038163854e8faad26d8
+// https://testnet.snowtrace.io/address/0xef4e8d48B1a246ce84198f6bB153c17827Ff2AB2
 contract DeployBorrowManagementReceiver is Script, Helper {
     function run(
         uint256 targetBlockChainID,

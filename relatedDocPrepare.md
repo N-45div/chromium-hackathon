@@ -138,4 +138,4 @@ Below materials will add for the future document or the slides
 
     you can adjust above flow based on your understanding.
 
-Other flow, such as ColletralRatio, reapy... now not work in test net.
+Other flow, such as ColletralRatio, reapy... privacy mode now not work in test net.
