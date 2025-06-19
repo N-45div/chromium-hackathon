@@ -10,12 +10,12 @@
 [submodule "lib/openzeppelin-contracts"]
 	path = lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
-[submodule "lib/chainlink-ccip"]
-	path = lib/chainlink-ccip
-	url = https://github.com/smartcontractkit/chainlink-ccip
 [submodule "lib/chainlink-brownie-contracts"]
 	path = lib/chainlink-brownie-contracts
 	url = https://github.com/smartcontractkit/chainlink-brownie-contracts
 [submodule "lib/chainlink-local"]
 	path = lib/chainlink-local
 	url = https://github.com/smartcontractkit/chainlink-local
+[submodule "lib/chainlink"]
+	path = lib/chainlink
+	url = https://github.com/smartcontractkit/chainlink

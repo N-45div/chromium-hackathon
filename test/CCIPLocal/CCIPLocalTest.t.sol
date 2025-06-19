@@ -6,8 +6,8 @@ import {Test, console2} from "forge-std/Test.sol";
 import {MockERC20} from "test/mock/MockERC20.sol";
 import {MockV3Aggregator} from "test/mock/MockV3Aggregator.sol";
 
-import {IRouterClient, WETH9, LinkToken, BurnMintERC677Helper} from "@chainlink/local/src/ccip/CCIPLocalSimulator.sol";
-import {CCIPLocalSimulator} from "@chainlink/local/src/ccip/CCIPLocalSimulator.sol";
+import {IRouterClient, WETH9, LinkToken, BurnMintERC677Helper} from "@chainlink/local/ccip/CCIPLocalSimulator.sol";
+import {CCIPLocalSimulator} from "@chainlink/local/ccip/CCIPLocalSimulator.sol";
 
 import {CollManagement, DepositCollateralInfo, TargetChainBorowInfo} from "src/core/coll/CollManagement.sol";
 import {BorrowManagement, AvaiableBorrowBalance} from "src/core/borrow/BorrowManagement.sol";
@@ -57,8 +57,7 @@ contract CCIPLocalTest is Test {
         targetChainSelector = chainSelector;
         sourceChainSelector = chainSelector;
 
-        (sender_collManagement, receiver_borrowManagement) =
-            _initContracts(address(linkToken), address(sourceRouter), address(destinationRouter));
+        _initContracts(address(linkToken), address(sourceRouter), address(destinationRouter));
 
         uint256 linkForFees = 10_000 ether;
         ccipLocalSimulator.requestLinkFromFaucet(address(sender_collManagement), linkForFees);
@@ -103,16 +102,17 @@ contract CCIPLocalTest is Test {
             address collateralToken,
             address borrowToken2,
             address initiator,
-            uint256 sourceChainId,
+            uint256 _sourceChainId,
             uint256 pendingAmount,
             uint256 borrowedAmount,
             BorrowStatus status,
             bytes memory proof,
+            address originalDepositor, // Added new field
             uint64 updatedAt
         ) = receiver_borrowManagement.availableBorrowTokenBalance(user2_user1);
         assertEq(collateralToken, address(mockCollateralWETH), "Collateral token mismatch");
         assertEq(borrowToken2, address(mockBorrowUSDC), "Borrow token mismatch");
-        assertEq(initiator, user1, "Initiator mismatch");
+        assertEq(initiator, user2_user1, "Initiator mismatch");
         assertEq(sourceChainId, sourceChainId, "Source chain ID mismatch");
         assertEq(pendingAmount, 0, "Pending amount should be zero in normal mode");
         assertEq(borrowedAmount, 0, "Borrowed amount should be zero in normal mode");
@@ -155,7 +155,6 @@ contract CCIPLocalTest is Test {
 
     function _initContracts(address linkToken, address sourceRouter, address destinationRouter)
         internal
-        returns (CollManagement sender_collManagement, BorrowManagement receiver_borrowManagement)
     {
         // initialize CollManagement
         vm.startPrank(manager);
@@ -166,7 +165,7 @@ contract CCIPLocalTest is Test {
         mockV3AggregatorCollateralWETH = new MockV3Aggregator(18, 2000 * 10 ** 18); // Mock price for WETH
         mockV3AggregatorBorrowUSDC = new MockV3Aggregator(8, 1 * 10 ** 8); // Mock price for USDC
         // TODO, should change below params
-        privacyPool = new PrivacyPool(20, address(0));
+        privacyPool = new PrivacyPool(20, address(0), address(0), address(0), false); // ENABLE_ZK_BORROW_CHECK = false for tests
 
         vm.startPrank(manager);
         //   uint64 _targetChainSelector,

@@ -3,7 +3,7 @@ pragma solidity 0.8.30;
 
 /**
  * @title IPrivacyPool
- * @author Sektorial12 (Cascade)
+ * @author Sektorial12
  * @notice Interface for the PrivacyPool contract, which manages ZK-based private deposits and borrow authorizations.
  */
 interface IPrivacyPool {
@@ -45,7 +45,7 @@ interface IPrivacyPool {
      * @param recipient The address on the target chain that is authorized to receive the borrowed funds.
      * @param borrowAmount The amount of the borrowToken to be authorized.
      * @param borrowToken The token to be borrowed on the target chain.
-     * @param targetChainId The destination chain for the borrow.
+     * @param targetChainSelector The CCIP destination chain selector for the borrow.
      * @param proof The ZK proof (Proof B) proving knowledge of the secret for the given commitment.
      */
     function authorizeBorrow(
@@ -56,5 +56,5 @@ interface IPrivacyPool {
         address borrowToken,
         uint64 targetChainSelector, // CCIP Target Chain Selector
         bytes calldata proof
-    ) external;
+    ) external returns (bool success);
 }

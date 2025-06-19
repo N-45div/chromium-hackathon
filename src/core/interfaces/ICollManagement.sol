@@ -23,7 +23,7 @@ struct SupportCollInfo {
     uint256 collateralRatio;
     uint256 targetChainId;
     uint64 targetChainSelector; //  chainlink ChainSelector
-    address targerChainBorrowManager;
+    address targetChainBorrowManager;
     address borrowToken;
     bool isSupported;
 }

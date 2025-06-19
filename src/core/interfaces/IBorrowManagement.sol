@@ -16,6 +16,7 @@ struct AvaiableBorrowBalance {
     uint256 borrowedAmount;
     BorrowStatus status;
     bytes proof;
+    address originalDepositor;
     uint64 updatedAt; // timestamp of the last update
 }
 
@@ -29,7 +30,7 @@ struct SupportBorrowCollTokenInfo {
 
 interface IBorrowManagement {
     function borrowApply(uint256 amount) external;
-    function borrowApply(uint256 amount, bytes32 commitmentHash, bytes calldata proof) external;
+    function borrowApply(uint256 amount, bytes32 commitmentHash, bytes32 nullifierHash, bytes calldata proof) external;
 
     function repayApply(uint256 amount) external;
     function repayApply(uint256 amount, bytes32 commitmentHash, bytes calldata proof) external;

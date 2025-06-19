@@ -9,7 +9,10 @@ enum BorrowStatus {
     BORROW_CONFIRMED_TARGET,
     REPAY_PENDING_TARGET,
     REPAY_CONFIRMED_SOURCE,
-    REPAY_CONFIRMED_TARGET
+    REPAY_CONFIRMED_TARGET,
+    BORROW_VALIDATE_REQUEST_SOURCE, // Target asks Source to validate a borrow
+    BORROW_VALIDATE_APPROVED_TARGET,  // Source tells Target borrow is approved
+    BORROW_VALIDATE_REJECTED_TARGET   // Source tells Target borrow is rejected
 }
 
 struct CrossChainBorrowInfo {
@@ -25,11 +28,14 @@ struct CrossChainBorrowInfo {
     bytes32 nullifierHash;
     //  for spend authorization, especially when Source confirms a borrow
     bytes zkProof;
+    uint256 validationId; // ID to track pending validation requests
 }
 
 import {TargetChainBorowInfo} from "src/core/interfaces/ICollManagement.sol";
 
 using CrossChainBorrowLib for CrossChainBorrowInfo global;
+
+error InvalidCrossChainMessageMode();
 
 library CrossChainBorrowLib {
     // add helper functions for CrossChainBorrowInfo if needed
@@ -45,8 +51,7 @@ library CrossChainBorrowLib {
             (self.recipientAddress == address(0x0) && self.commitmentHash == bytes32(0))
                 || (self.recipientAddress != address(0x0) && self.commitmentHash != bytes32(0))
         ) {
-            //  TODO add this error Data format error
-            revert();
+            revert InvalidCrossChainMessageMode();
         }
 
         if (self.commitmentHash != bytes32(0)) {

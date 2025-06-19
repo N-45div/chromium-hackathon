@@ -21,7 +21,7 @@ contract DeployPrepareContractForSourceChain is Script, Helper {
         vm.startBroadcast(deployerPrivateKey);
 
         MockERC20 mockCollateralWETH = new MockERC20("Mock Collateral ETH", "WETH");
-        PrivacyPool privacyPool = new PrivacyPool(20, address(0));
+        PrivacyPool privacyPool = new PrivacyPool(20, address(0), address(0), address(0), true); // ENABLE_ZK_BORROW_CHECK = true for deployment;
 
         console.log(
             "mockCollateralWETH contract deployed on ",
@@ -47,7 +47,7 @@ contract DeployPrepareContractForTargetChain is Script, Helper {
         vm.startBroadcast(deployerPrivateKey);
 
         MockERC20 mockBorrowUSDC = new MockERC20("Mock Borrow USDC", "USDC");
-        PrivacyPool privacyPool = new PrivacyPool(20, address(0));
+        PrivacyPool privacyPool = new PrivacyPool(20, address(0), address(0), address(0), true); // ENABLE_ZK_BORROW_CHECK = true for deployment;
 
         console.log(
             "mockBorrowUSDC contract deployed on ", networks[blockChainID], "with address: ", address(mockBorrowUSDC)
