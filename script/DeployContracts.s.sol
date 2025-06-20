@@ -7,7 +7,7 @@ import {BorrowManagement} from "src/core/borrow/BorrowManagement.sol";
 import {CollManagement} from "src/core/coll/CollManagement.sol";
 import {MockERC20, ERC20} from "test/mock/MockERC20.sol";
 import {PrivacyPool} from "src/core/privacy/PrivacyPool.sol";
-import {CollManagement, DepositCollateralInfo, TargetChainBorowInfo} from "src/core/coll/CollManagement.sol";
+
 
 // mockCollateralWETH : necessary praparation for the CollManagement and BorrowManagement
 // PrivacyPool for the source  chain
@@ -90,15 +90,10 @@ contract DeployCollManagementSender is Script, Helper {
 
         (address ETH_USD_PRICE_FEED, address USDC_USD_PRICE_FEED) = getPriceFeeds(sourceBlockChainID);
         CollManagement sender_collManagement = new CollManagement(
-            sourceCollateralToken,
-            ETH_USD_PRICE_FEED,
-            targetBorrowUSDC,
-            USDC_USD_PRICE_FEED,
-            COLLATERAL_RATIO, // 150% collateral ratio
-            targetBlockChainID,
-            sourceRouter,
-            privacyPool_source_chain,
-            link
+            sourceCollateralToken, // _collateralToken
+            sourceRouter,          // _router
+            link,                  // _linkToken
+            privacyPool_source_chain // _privacyPoolAddress
         );
         console.log(
             "CollManagement contract deployed on ",
@@ -125,7 +120,10 @@ contract DeployBorrowManagementReceiver is Script, Helper {
         (address targetRouter, address linkToken,,) = getConfigFromNetwork(targetBlockChainID);
 
         BorrowManagement receiver_borrowManagement = new BorrowManagement(
-            targetBorrowUSDC, sourceCollateralToken, targetRouter, targetChainPrivacyPool, linkToken
+            targetBorrowUSDC,      // _borrowToken
+            targetRouter,          // _router
+            linkToken,             // _linkToken
+            targetChainPrivacyPool // _privacyPoolAddress
         );
         console.log(
             "borrowManagement contract deployed on ",
@@ -155,8 +153,8 @@ contract SetRouterForStratoLendNetWorkForSource is Script, Helper {
 
         (,,, uint64 targetChainSelector) = getConfigFromNetwork(targetBlockChainID);
 
-        CollManagement(sender_collManagement).initTargetChainParamsForCCIP(
-            mockCollateralWETH, receiver_borrowManagement, targetChainSelector
+        CollManagement(sender_collManagement).setTargetChainParams(
+            mockCollateralWETH, targetChainSelector, receiver_borrowManagement
         );
 
         vm.stopBroadcast();
@@ -168,15 +166,21 @@ contract SetRouterForStratoLendNetWorkForTarget is Script, Helper {
         address sender_collManagement,
         address receiver_borrowManagement,
         address targetBorrowUSDC,
-        uint256 sourceBlockChainID
+        uint256 sourceBlockChainID, // ID of the source chain
+        uint256 targetBlockChainID  // ID of the target chain (current chain)
     ) external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        (address targetRouter, address linkToken,, uint64 sourceChainSelector) =
-            getConfigFromNetwork(sourceBlockChainID);
-        BorrowManagement(receiver_borrowManagement).initSourceChainParamsForCCIP(
-            targetBorrowUSDC, sender_collManagement, sourceChainSelector
+        (,,, uint64 sourceChainSelector) = getConfigFromNetwork(sourceBlockChainID);
+        (,,, uint64 ownChainSelector_for_target) = getConfigFromNetwork(targetBlockChainID); // This is the target's own selector
+
+        BorrowManagement(receiver_borrowManagement).setSourceChainParams(
+            targetBorrowUSDC,              // _collateralToken (which is borrow token for BorrowManagement)
+            sourceBlockChainID,            // _sourceChainId
+            sourceChainSelector,           // _sourceChainSelector
+            sender_collManagement,         // _sourceChainCollManager
+            ownChainSelector_for_target    // _ownChainSelector
         );
         vm.stopBroadcast();
     }
@@ -193,24 +197,14 @@ contract DepositCollateral is Script, Helper {
         address sender_collManagement,
         address mockCollateralWETH,
         uint256 collateralAmount,
-        uint256 targetChainId,
-        address mockBorrowUSDC,
         address recipient_by_depositor
     ) external {
-        DepositCollateralInfo memory depositInfo = DepositCollateralInfo({
-            collateralToken: mockCollateralWETH,
-            amount: collateralAmount,
-            targetChainId: targetChainId,
-            borrowToken: mockBorrowUSDC,
-            recipientAddress: recipient_by_depositor, // specify the recipient address
-            proofA: bytes(""), // empty proof for normal mode
-            commitmentHash: bytes32(0) // no commitment hash in normal mode
-        });
-
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
         ERC20(mockCollateralWETH).approve(sender_collManagement, collateralAmount);
-        CollManagement(sender_collManagement).depositCollateral(depositInfo);
+        CollManagement(sender_collManagement).depositCollateral(
+            mockCollateralWETH, collateralAmount, recipient_by_depositor
+        );
 
         vm.stopBroadcast();
     }

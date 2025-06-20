@@ -1,41 +1,41 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-struct DepositCollateralInfo {
+// Info for depositing collateral on the source chain
+struct DepositInfo {
     address collateralToken;
     uint256 amount;
-    uint256 targetChainId;
     address borrowToken;
-    address recipientAddress; // zero address means no specify
-    bytes proofA;
+    address recipientAddress;
     bytes32 commitmentHash;
+    bytes32 merkleRoot;
 }
 
-// TODO, below how to integrate with privacy mode
-struct TargetChainBorowInfo {
-    address borrowToken;
-    address recipientAddress; // zero address means no specify
+// Stores information about a user's collateral on the source chain
+struct UserCollateralInfo {
+    uint256 totalDeposited;
+    uint256 totalBorrowed;
+}
+
+// Stores information about a user's borrow balance on a specific target chain
+struct TargetChainBorrowInfo {
     uint256 syncBorrowBalance;
-}
-
-struct SupportCollInfo {
-    address collateralToken;
-    uint256 collateralRatio;
-    uint256 targetChainId;
-    uint64 targetChainSelector; //  chainlink ChainSelector
-    address targetChainBorrowManager;
     address borrowToken;
-    bool isSupported;
 }
 
 interface ICollManagement {
-    // just depositCollateral without selecting the target chain and the borrow token
-    function depositCollateral(address collateralToken, uint256 amount) external;
+    /**
+     * @notice Deposit collateral to be used for cross-chain borrowing.
+     * @param _collateralToken The address of the collateral token.
+     * @param _amount The amount to deposit.
+     * @param _recipient The recipient address on the target chain.
+     */
+    function depositCollateral(address _collateralToken, uint256 _amount, address _recipient) external;
 
-    // depositCollateral by selecting the target chain and the borrow token, and specifying the address who can borrow
-    function depositCollateral(DepositCollateralInfo memory depositInfo) external;
-
+    /**
+     * @notice Withdraw collateral.
+     * @param collateralToken The address of the collateral token to withdraw.
+     * @param amount The amount to withdraw.
+     */
     function withdrawCollateral(address collateralToken, uint256 amount) external;
-
-    function liquidateCollateral(address collateralToken, address user) external;
 }

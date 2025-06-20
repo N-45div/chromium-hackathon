@@ -3,35 +3,31 @@ pragma solidity 0.8.30;
 
 enum BorrowStatus {
     NONE,
-    INITIAL,
-    BORROW_PENDING_TARGET,
-    BORROW_CONFIRMED_SOURCE,
-    BORROW_CONFIRMED_TARGET,
-    REPAY_PENDING_TARGET,
-    REPAY_CONFIRMED_SOURCE,
-    REPAY_CONFIRMED_TARGET,
-    BORROW_VALIDATE_REQUEST_SOURCE, // Target asks Source to validate a borrow
-    BORROW_VALIDATE_APPROVED_TARGET,  // Source tells Target borrow is approved
-    BORROW_VALIDATE_REJECTED_TARGET   // Source tells Target borrow is rejected
+    INITIAL, // Collateral deposited, borrow available on target
+    BORROW_PENDING_TARGET, // Target requests borrow validation from Source
+    BORROW_CONFIRMED_SOURCE, // Source confirms borrow is valid
+    BORROW_CONFIRMED_TARGET, // Target acknowledges confirmation, funds available
+    REPAY_PENDING_TARGET, // Target requests repay validation from Source
+    REPAY_CONFIRMED_SOURCE // Source confirms repay is valid
 }
 
 struct CrossChainBorrowInfo {
-    address recipientAddress; // zero address means no specify
+    address recipientAddress; // (Normal Mode) User address on target chain
     address collateralToken;
     address borrowToken;
-    uint256 amount; // the borrow amount or repay amount
-    BorrowStatus status; // the status of the borrow operation
-    uint256 sourceChainId; // for refeence, if needed
-    uint256 targetChainId; // for refeence, if needed
-    bytes32 commitmentHash; // linking to the private balance/deposit
-    address depositor; //
-    bytes32 nullifierHash;
-    //  for spend authorization, especially when Source confirms a borrow
-    bytes zkProof;
-    uint256 validationId; // ID to track pending validation requests
+    uint256 amount; // The borrow or repay amount
+    BorrowStatus status; // The status of the cross-chain operation
+    uint256 sourceChainId;
+    uint256 targetChainId;
+    uint64 targetChainSelector; // CCIP selector for the target chain
+    bytes32 commitmentHash; // (Privacy Mode) Links to the private deposit
+    address depositor; // (Normal Mode) User address on source chain
+    bytes32 nullifierHash; // (Privacy Mode) Prevents double-spending
+    bytes zkProof; // (Privacy Mode) Spend authorization proof
+    bytes32 merkleRoot; // (Privacy Mode) Merkle root for ZK proofs on target chain
 }
 
-import {TargetChainBorowInfo} from "src/core/interfaces/ICollManagement.sol";
+import {TargetChainBorrowInfo} from "src/core/interfaces/ICollManagement.sol";
 
 using CrossChainBorrowLib for CrossChainBorrowInfo global;
 

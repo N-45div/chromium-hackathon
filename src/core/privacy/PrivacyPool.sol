@@ -130,7 +130,8 @@ contract PrivacyPool is IPrivacyPool, Ownable {
             depositor: _depositor,
             nullifierHash: _nullifierHash,
             zkProof: _zkProofData,
-            validationId: 0
+            targetChainSelector: _targetChainSelector,
+            merkleRoot: s_commitmentsTree.root()
         });
 
         bytes memory encodedData = abi.encode(borrowInfo);
