@@ -40,8 +40,8 @@ Recognizing these challenges and opportunities, our protocol is specifically des
 
    0. AI-driven yield optimization and automated liquidation protection (Priority 1).
 
-   1. Dashboard displaying comprehensive lending and borrowing APYs across different supportede chains
-      help user find the potential opportunities or riskes
+   1. Dashboard displaying comprehensive lending and borrowing APYs across different supported chains
+      to help users find the potential opportunities or risks.
 
    2. Build automated yield scanner showing real opportunities
       (TO DO)
