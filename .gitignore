@@ -1,7 +1,5 @@
 cache/
 out/
-!CollManagement.sol
-!BorrowManagement.sol
 .gas-snapshot
 .vscode/
 .env
@@ -36,6 +34,3 @@ __pycache__/
 
 # Foundry deployment artifacts
 broadcast/
-
-# Generated ABI files
-script/abi/*.json

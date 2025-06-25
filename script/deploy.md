@@ -12,8 +12,8 @@ This document outlines the deployment process for the cross-chain lending protoc
 
 ### Avalanche Fuji (Target Chain - Chain ID: 43113)
 
-*   **`BorrowManagement`**: [`0xd4aa953485eF4f1A916e42b9350Ab510f0920465`](https://testnet.snowtrace.io/address/0xd4aa953485eF4f1A916e42b9350Ab510f0920465)
-*   **`PrivacyPool`**: [`0x054a8677aEe0343939463ac06A4d2104D3687A786`](https://testnet.snowtrace.io/address/0x054a8677aEe0343939463ac06A4d2104D3687A786)
+*   **`BorrowManagement`**: [`0xb00a914c79ba90b762Fa9B6306048579ceFfE6Dc`](https://testnet.snowtrace.io/address/0xb00a914c79ba90b762Fa9B6306048579ceFfE6Dc)
+*   **`PrivacyPool`**: [`0x054a8677aEe0343939463ac06A4d2104D3687A78`](https://testnet.snowtrace.io/address/0x054a8677aEe0343939463ac06A4d2104D3687A78)
 *   **`mockBorrowUSDC`**: [`0x5425890298a76a5fDE71C00E1554ebb843aB41d2`](https://testnet.snowtrace.io/address/0x5425890298a76a5fDE71C00E1554ebb843aB41d2)
 
 ---
@@ -134,7 +134,9 @@ The frontend application must guide the user through this two-network process, i
 
 Before you start, make sure you have:
 
-1.  **Contract ABIs**: Generate them using the commands in the "ABI File Generation" section.
+1.  **Contract ABIs**: The ABI (Application Binary Interface) JSON files are required to interact with the contracts. They are located in the top-level `/abis` directory:
+    - `CollManagement` ABI: `/abis/CollManagement.json`
+    - `BorrowManagement` ABI: `/abis/BorrowManagement.json`
 2.  **Contract Addresses**: Get these from the "Deployed Contract Addresses" section.
 3.  **Web3 Provider**: A connection to the user's wallet (e.g., MetaMask).
 
