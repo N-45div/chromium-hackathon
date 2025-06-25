@@ -114,3 +114,68 @@ jq '{chainID: 11155111, abi: .abi }' out/CollManagement.sol/CollManagement.json 
 # BorrowManagement ABI (Fuji)
 jq '{chainID: 43113, abi: .abi }' out/BorrowManagement.sol/BorrowManagement.json > script/abi/BorrowManagement_43113.json
 ```
+
+---
+
+## Frontend Integration Guide
+
+This guide explains how to connect a frontend application to our deployed smart contracts. It's written for a developer using a library like Ethers.js or viem.
+
+### High-Level Concept for Frontend
+
+The key thing to understand is that this is a **cross-chain application**. The user performs actions on two different blockchains to complete one full loan cycle.
+
+1.  **Deposit on Sepolia:** The user connects their wallet to the Sepolia network and deposits collateral (`WETH`). In this transaction, they specify which address on the Fuji network is allowed to borrow against this collateral.
+2.  **Borrow on Fuji:** The user (or the designated address) connects their wallet to the Avalanche Fuji network to borrow funds (`USDC`).
+
+The frontend application must guide the user through this two-network process, including prompting them to switch networks in their wallet at the appropriate time.
+
+### Prerequisites
+
+Before you start, make sure you have:
+
+1.  **Contract ABIs**: Generate them using the commands in the "ABI File Generation" section.
+2.  **Contract Addresses**: Get these from the "Deployed Contract Addresses" section.
+3.  **Web3 Provider**: A connection to the user's wallet (e.g., MetaMask).
+
+### User Flow 1: Depositing Collateral (on Sepolia)
+
+This flow allows a user to deposit `WETH` as collateral on the Sepolia network.
+
+**UX Note:** The UI for this flow should be active only when the user's wallet is connected to Sepolia (Chain ID: `11155111`). If they are on the wrong network, prompt them to switch.
+
+**Step 1: Approve the `CollManagement` Contract**
+
+Before depositing, the user must approve the `CollManagement` contract to transfer their `mockCollateralWETH` tokens. This is a standard ERC20 approval flow.
+
+*   **Contract to call**: `mockCollateralWETH` (`0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`)
+*   **Function**: `approve(spender, amount)`
+*   **Parameters**:
+    *   `spender` (address): The `CollManagement` contract address: `0xd4aa953485eF4f1A916e42b9350Ab510f0920465`.
+    *   `amount` (uint256): The amount of WETH the user wishes to deposit (in wei).
+
+**Step 2: Deposit Collateral**
+
+Once the approval transaction is confirmed, call the `deposit` function on the `CollManagement` contract.
+
+*   **Contract to call**: `CollManagement` (`0xd4aa953485eF4f1A916e42b9350Ab510f0920465`)
+*   **Function**: `deposit(collateralToken, collateralAmount, recipient)`
+*   **Parameters**:
+    *   `collateralToken` (address): The `mockCollateralWETH` address: `0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`.
+    *   `collateralAmount` (uint256): The amount of WETH to deposit (in wei). Must be less than or equal to the approved amount.
+    *   `recipient` (address): **Crucial parameter.** This is the address on the **Avalanche Fuji network** that will be authorized to borrow. It can be the same as the depositor's address or a different one.
+
+### User Flow 2: Borrowing USDC (on Avalanche Fuji)
+
+This flow allows the designated `recipient` to borrow `mockBorrowUSDC` on the Fuji network.
+
+**UX Note:** The UI for this flow should be active only when the user's wallet is connected to Avalanche Fuji (Chain ID: `43113`). The connected wallet address must match the `recipient` address from the deposit step.
+
+**Step 1: Apply to Borrow**
+
+Call the `borrowApply` function on the `BorrowManagement` contract.
+
+*   **Contract to call**: `BorrowManagement` (`0xd4aa953485eF4f1A916e42b9350Ab510f0920465`)
+*   **Function**: `borrowApply(borrowAmount)`
+*   **Parameters**:
+    *   `borrowAmount` (uint256): The amount of `mockBorrowUSDC` the user wants to borrow (in its decimal format). The contract will automatically check if this amount is within the user's credit limit based on their collateral.

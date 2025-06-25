@@ -33,3 +33,9 @@ test/crosschain.t.sol
 # Python cache
 __pycache__/
 *.pyc
+
+# Foundry deployment artifacts
+broadcast/
+
+# Generated ABI files
+script/abi/*.json
