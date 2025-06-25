@@ -30,19 +30,33 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable(msg.sender
     event UserBorrowed(address indexed user, address indexed borrowToken, uint256 amount, uint256 timestamp);
     event BorrowInitial(address indexed initiator, address indexed collateralToken, address borrowToken);
     event BorrowInitialWithCommitment(bytes32 commitmentHash, address indexed collateralToken, address borrowToken);
-    event BorrowApply(address indexed user, address indexed collateralToken, address borrowToken, uint256 pendingAmount);
-    event BorrowApplyWithCommitment(bytes32 indexed commitmentHash, address indexed recipientAddress, address borrowToken, uint256 pendingAmount);
-    event BorrowApprovedAndTransfer(address indexed user, address indexed collateralToken, address borrowToken, uint256 amount);
-    event BorrowApprovedAndTransferWithCommitment(bytes32 indexed commitmentHash, address indexed recipientAddress, address indexed borrowToken, uint256 amount);
+    event BorrowApply(
+        address indexed user, address indexed collateralToken, address borrowToken, uint256 pendingAmount
+    );
+    event BorrowApplyWithCommitment(
+        bytes32 indexed commitmentHash, address indexed recipientAddress, address borrowToken, uint256 pendingAmount
+    );
+    event BorrowApprovedAndTransfer(
+        address indexed user, address indexed collateralToken, address borrowToken, uint256 amount
+    );
+    event BorrowApprovedAndTransferWithCommitment(
+        bytes32 indexed commitmentHash, address indexed recipientAddress, address indexed borrowToken, uint256 amount
+    );
     event RepayApply(address indexed repayer, address indexed borrowToken, uint256 amount);
-    event RepayApplyPrivate(bytes32 indexed commitmentHash, address indexed repayer, address indexed borrowToken, uint256 amount);
+    event RepayApplyPrivate(
+        bytes32 indexed commitmentHash, address indexed repayer, address indexed borrowToken, uint256 amount
+    );
     event RepayApprovedPublic(address indexed repayer, address indexed borrowToken, uint256 amount);
-    event RepayApprovedPrivate(bytes32 indexed commitmentHash, address indexed repayer, address indexed borrowToken, uint256 amount);
+    event RepayApprovedPrivate(
+        bytes32 indexed commitmentHash, address indexed repayer, address indexed borrowToken, uint256 amount
+    );
 
     error NOBorrowInfo(address user, address borrowToken);
     error RepayMoreThanBorrowed(address user, address borrowToken, uint256 repayAmount, uint256 borrowedAmount);
 
-    constructor(address _borrowToken, address _router, address _privacyPool, address _linkToken) CCIPReceiver(_router) {
+    constructor(address _borrowToken, address _router, address _privacyPool, address _linkToken)
+        CCIPReceiver(_router)
+    {
         BORROW_USDC = _borrowToken;
         privacyPool = _privacyPool;
         linkToken = _linkToken;
@@ -211,12 +225,13 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable(msg.sender
 
         if (crossChainBorrowInfo.status == BorrowStatus.INITIAL) {
             _borrowInitial(crossChainBorrowInfo);
+        } else if (crossChainBorrowInfo.status == BorrowStatus.BORROW_PENDING_TARGET) {
+            _executePrivateBorrow(crossChainBorrowInfo);
         } else if (crossChainBorrowInfo.status == BorrowStatus.BORROW_CONFIRMED_SOURCE) {
-            if (crossChainBorrowInfo.commitmentHash != bytes32(0)) {
-                // This is a ZK private borrow confirmation
+            (bool isPrivacyMode,) = crossChainBorrowInfo.checkModeAndStatus();
+            if (isPrivacyMode) {
                 _handlePrivateBorrowConfirmed(crossChainBorrowInfo);
             } else {
-                // This is a public borrow confirmation
                 _handlePublicBorrowConfirmed(crossChainBorrowInfo);
             }
         } else if (crossChainBorrowInfo.status == BorrowStatus.REPAY_CONFIRMED_SOURCE) {
@@ -229,7 +244,7 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable(msg.sender
     }
 
     function _borrowInitial(CrossChainBorrowInfo memory crossChainBorrowInfo) internal {
-        (bool isPrivacyMode, ) = crossChainBorrowInfo.checkModeAndStatus();
+        (bool isPrivacyMode,) = crossChainBorrowInfo.checkModeAndStatus();
 
         if (isPrivacyMode) {
             bytes32 commitmentHash = crossChainBorrowInfo.commitmentHash;
@@ -249,7 +264,9 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable(msg.sender
                 updatedAt: uint64(block.timestamp),
                 merkleRoot: crossChainBorrowInfo.merkleRoot
             });
-            emit BorrowInitialWithCommitment(commitmentHash, crossChainBorrowInfo.collateralToken, crossChainBorrowInfo.borrowToken);
+            emit BorrowInitialWithCommitment(
+                commitmentHash, crossChainBorrowInfo.collateralToken, crossChainBorrowInfo.borrowToken
+            );
         } else {
             address recipientAddress = crossChainBorrowInfo.recipientAddress;
             require(availableBorrowTokenBalance[recipientAddress].status == BorrowStatus.NONE, "Borrow info exists");
@@ -274,6 +291,57 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable(msg.sender
     }
 
     // Handles borrow confirmation for public borrows
+    function _executePrivateBorrow(CrossChainBorrowInfo memory crossChainBorrowInfo) internal {
+        bytes32 commitmentHash = crossChainBorrowInfo.commitmentHash;
+        address recipientAddress = crossChainBorrowInfo.recipientAddress;
+        uint256 amount = crossChainBorrowInfo.amount;
+
+        require(commitmentHash != bytes32(0), "Commitment hash is zero");
+        require(recipientAddress != address(0), "Recipient address is zero");
+        require(privateBorrowTokenBalance[commitmentHash].status == BorrowStatus.NONE, "Borrow info exists");
+
+        // Create the borrow record
+        privateBorrowTokenBalance[commitmentHash] = AvaiableBorrowBalance({
+            collateralToken: crossChainBorrowInfo.collateralToken,
+            borrowToken: crossChainBorrowInfo.borrowToken,
+            initiator: crossChainBorrowInfo.depositor, // Set initiator from incoming message
+            sourceChainId: crossChainBorrowInfo.sourceChainId,
+            pendingAmount: 0,
+            borrowedAmount: amount,
+            status: BorrowStatus.BORROW_CONFIRMED_TARGET,
+            proof: bytes(""), // Not used in this flow
+            originalDepositor: crossChainBorrowInfo.depositor,
+            recipientForZK: recipientAddress,
+            ownChainSelector: supportBorrowCollTokenInfo[BORROW_USDC].ownChainSelector,
+            updatedAt: uint64(block.timestamp),
+            merkleRoot: crossChainBorrowInfo.merkleRoot
+        });
+
+        // Transfer the funds to the recipient
+        IERC20(BORROW_USDC).safeTransfer(recipientAddress, amount);
+
+        // Send a confirmation message back to the source chain
+        CrossChainBorrowInfo memory ccbi = CrossChainBorrowInfo({
+            recipientAddress: recipientAddress,
+            collateralToken: crossChainBorrowInfo.collateralToken,
+            borrowToken: BORROW_USDC,
+            amount: amount,
+            status: BorrowStatus.BORROW_CONFIRMED_TARGET,
+            sourceChainId: crossChainBorrowInfo.sourceChainId,
+            targetChainId: block.chainid,
+            targetChainSelector: supportBorrowCollTokenInfo[BORROW_USDC].sourceChainSelector, // Selector for source chain
+            commitmentHash: commitmentHash,
+            depositor: crossChainBorrowInfo.depositor,
+            nullifierHash: bytes32(0),
+            zkProof: bytes(""),
+            merkleRoot: crossChainBorrowInfo.merkleRoot
+        });
+
+        _sendMessage(BORROW_USDC, abi.encode(ccbi), 100_000);
+
+        emit BorrowApprovedAndTransferWithCommitment(commitmentHash, recipientAddress, BORROW_USDC, amount);
+    }
+
     function _handlePublicBorrowConfirmed(CrossChainBorrowInfo memory crossChainBorrowInfo) internal {
         address recipientAddress = crossChainBorrowInfo.recipientAddress;
         AvaiableBorrowBalance storage userBalance = availableBorrowTokenBalance[recipientAddress];
@@ -315,7 +383,28 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable(msg.sender
 
         IERC20(BORROW_USDC).safeTransfer(ccbi.recipientAddress, amountToTransfer);
 
-        emit BorrowApprovedAndTransferWithCommitment(ccbi.commitmentHash, ccbi.recipientAddress, BORROW_USDC, amountToTransfer);
+        emit BorrowApprovedAndTransferWithCommitment(
+            ccbi.commitmentHash, ccbi.recipientAddress, BORROW_USDC, amountToTransfer
+        );
+
+        // Send a final confirmation back to the source chain to close the loop
+        CrossChainBorrowInfo memory ackInfo = CrossChainBorrowInfo({
+            recipientAddress: ccbi.recipientAddress,
+            collateralToken: ccbi.collateralToken,
+            borrowToken: BORROW_USDC,
+            amount: amountToTransfer,
+            status: BorrowStatus.BORROW_CONFIRMED_TARGET, // Final confirmation status
+            sourceChainId: supportBorrowCollTokenInfo[BORROW_USDC].sourceChainId,
+            targetChainId: block.chainid,
+            targetChainSelector: supportBorrowCollTokenInfo[BORROW_USDC].sourceChainSelector,
+            commitmentHash: ccbi.commitmentHash, // CRITICAL: Propagate the commitment hash
+            depositor: ccbi.depositor,
+            nullifierHash: ccbi.nullifierHash,
+            zkProof: ccbi.zkProof,
+            merkleRoot: ccbi.merkleRoot
+        });
+
+        _sendMessage(BORROW_USDC, abi.encode(ackInfo), 100_000);
         // Optionally, emit a generic UserBorrowed event as well if needed for off-chain tracking consistency
         // emit UserBorrowed(ccbi.recipientAddress, BORROW_USDC, amountToTransfer, block.timestamp);
     }
@@ -354,7 +443,10 @@ contract BorrowManagement is IBorrowManagement, CCIPReceiver, Ownable(msg.sender
         emit RepayApprovedPrivate(ccbi.commitmentHash, userBalance.recipientForZK, BORROW_USDC, repayAmount);
     }
 
-    function _sendMessage(address borrowToken, bytes memory data, uint256 gasForDestCall) internal returns (bytes32 messageId) {
+    function _sendMessage(address borrowToken, bytes memory data, uint256 gasForDestCall)
+        internal
+        returns (bytes32 messageId)
+    {
         SupportBorrowCollTokenInfo storage sbtci = supportBorrowCollTokenInfo[borrowToken];
         require(sbtci.sourceChainCollManager != address(0), "Source chain not configured");
 

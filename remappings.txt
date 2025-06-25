@@ -6,3 +6,5 @@ forge-std/=lib/forge-std/src/
 @chainlink/local/=lib/chainlink-local/src/
 @chainlink-ccip/=lib/chainlink-ccip/chains/evm/contracts/
 @chainlink/contracts=lib/chainlink-brownie-contracts/contracts/
+contracts/=contracts/
+test/=test/

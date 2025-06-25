@@ -33,18 +33,20 @@ library MerkleTree {
      */
     function insert(Tree storage self, bytes32 leaf) internal returns (uint256) {
         uint256 currentIndex = self.nextIndex;
-        require(currentIndex < 2**self.levels, "Tree is full");
+        require(currentIndex < 2 ** self.levels, "Tree is full");
 
         bytes32 currentLevelHash = leaf;
         bytes32 left;
         bytes32 right;
 
         for (uint32 i = 0; i < self.levels; i++) {
-            if (currentIndex % 2 == 0) { // is left node
+            if (currentIndex % 2 == 0) {
+                // is left node
                 self.filledSubtrees[i] = currentLevelHash;
                 left = currentLevelHash;
                 right = 0; // Placeholder for sibling
-            } else { // is right node
+            } else {
+                // is right node
                 left = self.filledSubtrees[i];
                 right = currentLevelHash;
             }

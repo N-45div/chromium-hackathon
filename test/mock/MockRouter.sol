@@ -8,22 +8,26 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract MockRouter is IRouterClient {
     Client.EVM2AnyMessage public lastMessageSent;
     uint64 public lastDestinationChainSelector;
-    function isChainSupported(uint64 /*chainSelector*/) external pure override returns (bool supported) {
+
+    function isChainSupported(uint64 /*chainSelector*/ ) external pure override returns (bool supported) {
         return true;
     }
 
-    function getFee(uint64 /*destinationChainSelector*/, Client.EVM2AnyMessage memory /*message*/)
+    function getFee(uint64, /*destinationChainSelector*/ Client.EVM2AnyMessage memory /*message*/ )
         public
         pure
         override
-        returns (uint256 fee) {
+        returns (uint256 fee)
+    {
         return 1e17;
     }
 
-    function ccipSend(
-        uint64 destinationChainSelector,
-        Client.EVM2AnyMessage calldata message
-    ) external payable override returns (bytes32) {
+    function ccipSend(uint64 destinationChainSelector, Client.EVM2AnyMessage calldata message)
+        external
+        payable
+        override
+        returns (bytes32)
+    {
         lastMessageSent = message;
         lastDestinationChainSelector = destinationChainSelector;
         uint256 fee = getFee(destinationChainSelector, message);

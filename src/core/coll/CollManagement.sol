@@ -1,20 +1,38 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20 as OZERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 import {CCIPReceiver} from "@chainlink-ccip/applications/CCIPReceiver.sol";
 import {IRouterClient} from "@chainlink-ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink-ccip/libraries/Client.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 import {ICollManagement, DepositInfo, UserCollateralInfo} from "src/core/interfaces/ICollManagement.sol";
 import {IPrivacyPool} from "src/core/interfaces/IPrivacyPool.sol";
 import {CrossChainBorrowInfo, BorrowStatus} from "src/core/CrossChainBorrowLib.sol";
+import {CrossChainBorrowLib} from "src/core/CrossChainBorrowLib.sol";
 
-contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
-    using SafeERC20 for IERC20;
+interface IERC20withDecimals {
+    function decimals() external view returns (uint8);
+}
+
+contract CollManagement is ICollManagement, CCIPReceiver, Ownable, AccessControl {
+    using SafeERC20 for OZERC20;
+    using CrossChainBorrowLib for CrossChainBorrowInfo;
+
+    struct Collateral {
+        address token;
+        uint256 amount;
+    }
+
+    struct Debt {
+        address token;
+        uint256 amount;
+    }
 
     // Struct to store parameters for a supported target chain
     struct TargetChainParams {
@@ -22,50 +40,84 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
         address borrowManagementContract;
     }
 
-    // The collateral token contract address (e.g., WETH)
+
+    // Struct to store private deposit information
+    struct PrivateDepositInfo {
+        address collateralToken;
+        uint256 amount;
+    }
+
     address public immutable COLL_WETH;
-    // The LINK token contract address for CCIP fees
     address private immutable linkToken;
 
-    // Mapping from a collateral token to its supported target chain parameters.
-    // For this version, we assume 1 collateral token maps to 1 target chain.
+    constructor(address _router, address _link, address _weth) CCIPReceiver(_router) Ownable(msg.sender) {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        linkToken = _link;
+        COLL_WETH = _weth;
+    }
+
     mapping(address => TargetChainParams) public targetChainParams;
     mapping(address => address) public priceFeeds;
 
-    // Mapping: user => collateral token => UserCollateralInfo (for public borrows)
     mapping(address => mapping(address => UserCollateralInfo)) public userCollateral;
+    mapping(bytes32 => PrivateDepositInfo) public privateDeposits;
 
-    // Mapping: commitmentHash => UserCollateralInfo (for ZK private borrows)
-    mapping(bytes32 => UserCollateralInfo) public privateUserCollateral;
+    mapping(address => mapping(address => uint256)) public userDebt;
+    mapping(bytes32 => mapping(address => uint256)) public privateDebt;
 
-    // PrivacyPool contract instance
+    mapping(address => address[]) public userBorrowedTokens;
+    mapping(address => mapping(address => bool)) private _hasDebtInToken;
+    mapping(bytes32 => address[]) public commitmentBorrowedTokens;
+    mapping(bytes32 => mapping(address => bool)) private _hasCommitmentDebtInToken;
+
+    uint256 public liquidationThreshold = 150; // In percentage, e.g., 150 for 150%
+    uint256 public liquidationBonus = 5; // In percentage, e.g., 5 for 5%
+
+    mapping(address => address[]) public userDepositedCollaterals;
+    mapping(address => mapping(address => bool)) private _hasDeposited;
+    mapping(address => bytes32[]) public userCommitments;
+
+    bytes32 public constant DEBT_ISSUER_ROLE = keccak256("DEBT_ISSUER_ROLE");
     IPrivacyPool public privacyPool;
 
-    // --- Events ---
     event CollateralDeposited(address indexed user, address indexed collateralToken, uint256 amount);
     event CollateralWithdrawn(address indexed user, address indexed collateralToken, uint256 amount);
     event BorrowRequestHandledOnSource(address indexed depositor, address indexed collateralToken, uint256 amount);
-    event ZKBorrowRequestHandledOnSource(bytes32 indexed commitmentHash, address indexed recipientAddress, address borrowToken, uint256 amount);
-    event ZKRepayPendingHandledOnSource(bytes32 indexed commitmentHash, address indexed repayer, address borrowToken, uint256 amount);
+    event ZKBorrowRequestHandledOnSource(
+        bytes32 indexed commitmentHash, address indexed recipientAddress, address borrowToken, uint256 amount
+    );
+    event ZKRepayPendingHandledOnSource(
+        bytes32 indexed commitmentHash, address indexed repayer, address borrowToken, uint256 amount
+    );
     event RepayCompletedOnSource(address indexed depositor, address indexed collateralToken, uint256 amount);
+    event BorrowRequestFinalizedPrivate(bytes32 indexed commitmentHash, uint256 amount);
+    event Liquidation(address indexed liquidator, address indexed user, address collateral, uint256 seizedAmount);
 
-    // --- Errors ---
     error UnsupportedCollateralToken(address token);
     error ZeroAmount();
     error TargetChainNotSet();
+    error NotEnoughLink(uint256 required, uint256 has);
     error InsufficientCollateral();
     error ActiveDebt();
     error NoCollateralFound();
     error PrivacyPoolNotSet();
     error AuthorizationFailed(bytes32 commitmentHash);
     error RepayMoreThanBorrowed(address depositor, address collateralToken, uint256 repayAmount, uint256 borrowedAmount);
-    error RepayMoreThanBorrowedZK(bytes32 commitmentHash, address borrowToken, uint256 repayAmount, uint256 borrowedAmount);
+    error RepayMoreThanBorrowedZK(
+        bytes32 commitmentHash, address borrowToken, uint256 repayAmount, uint256 borrowedAmount
+    );
+    error PriceFeedNotSet(address token);
+    error HealthFactorNotBelowThreshold();
+    error NoDebtToRepay();
 
-    constructor(address _collateralToken, address _router, address _linkToken, address _privacyPoolAddress) CCIPReceiver(_router) Ownable(msg.sender) {
-        COLL_WETH = _collateralToken;
-        linkToken = _linkToken;
-        if (_privacyPoolAddress == address(0)) revert PrivacyPoolNotSet();
-        privacyPool = IPrivacyPool(_privacyPoolAddress);
+    function setLiquidationThreshold(uint256 threshold) external onlyOwner {
+        require(threshold > 100, "Threshold must be > 100");
+        liquidationThreshold = threshold;
+    }
+
+    function setLiquidationBonus(uint256 bonus) external onlyOwner {
+        require(bonus < 100, "Bonus must be < 100");
+        liquidationBonus = bonus;
     }
 
     function setPrivacyPool(address _privacyPoolAddress) external onlyOwner {
@@ -73,25 +125,16 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
         privacyPool = IPrivacyPool(_privacyPoolAddress);
     }
 
-    function setCollateralToken(address _collateralToken, address _priceFeed) external onlyOwner {
-        // COLL_WETH is immutable and set in the constructor.
-        // This function should only be called if _collateralToken matches COLL_WETH,
-        // or if the intention is to only set priceFeeds for the already configured COLL_WETH.
-        // For safety, ensure we are setting the price feed for the configured COLL_WETH.
-        if (_collateralToken != COLL_WETH) revert UnsupportedCollateralToken(_collateralToken);
-        priceFeeds[_collateralToken] = _priceFeed;
+    function setPriceFeed(address _token, address _priceFeed) external onlyOwner {
+        priceFeeds[_token] = _priceFeed;
     }
 
-    function setTargetChainParams(
-        address _collateralToken,
-        uint64 _chainSelector,
-        address _borrowManagementContract
-    ) external onlyOwner {
-        if (_collateralToken != COLL_WETH) revert UnsupportedCollateralToken(_collateralToken);
-        targetChainParams[_collateralToken] = TargetChainParams({
-            chainSelector: _chainSelector,
-            borrowManagementContract: _borrowManagementContract
-        });
+    function setTargetChainParams(address _collateralToken, uint64 _chainSelector, address _borrowManagementContract)
+        external
+        onlyOwner
+    {
+        targetChainParams[_collateralToken] =
+            TargetChainParams({chainSelector: _chainSelector, borrowManagementContract: _borrowManagementContract});
     }
 
     /**
@@ -106,9 +149,14 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
         if (_amount == 0) revert ZeroAmount();
         if (targetChainParams[_collateralToken].borrowManagementContract == address(0)) revert TargetChainNotSet();
 
-        IERC20(_collateralToken).safeTransferFrom(msg.sender, address(this), _amount);
+        OZERC20(_collateralToken).safeTransferFrom(msg.sender, address(this), _amount);
 
         userCollateral[msg.sender][_collateralToken].totalDeposited += _amount;
+
+        if (!_hasDeposited[msg.sender][_collateralToken]) {
+            _hasDeposited[msg.sender][_collateralToken] = true;
+            userDepositedCollaterals[msg.sender].push(_collateralToken);
+        }
 
         emit CollateralDeposited(msg.sender, _collateralToken, _amount);
 
@@ -132,17 +180,78 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
     }
 
     /**
-     * @notice Withdraw collateral.
-     * @param collateralToken The address of the collateral token to withdraw.
-     * @param amount The amount to withdraw.
+     * @notice Initiates a private (ZK) borrow by authorizing it with the PrivacyPool and sending a CCIP message.
+     * @param _commitment The commitment hash for the private deposit.
+     * @param _nullifierHash The nullifier hash to prevent double-spending.
+     * @param _recipient The recipient address on the target chain.
+     * @param _borrowAmount The amount to borrow.
+     * @param _borrowToken The token to borrow.
+     * @param _targetChainSelector The chain selector for the target chain.
+     * @param _proof The ZK proof data.
      */
+    function initiatePrivateBorrow(
+        bytes32 _commitment,
+        bytes32 _nullifierHash,
+        address _recipient,
+        uint256 _borrowAmount,
+        address _borrowToken,
+        uint64 _targetChainSelector,
+        bytes calldata _proof
+    ) external {
+        // 1. Authorize the borrow with the PrivacyPool
+        bool authorized = privacyPool.authorizeBorrow(
+            _commitment, _nullifierHash, _recipient, _borrowAmount, _borrowToken, _targetChainSelector, _proof
+        );
+        if (!authorized) revert AuthorizationFailed(_commitment);
+
+        CrossChainBorrowInfo memory crossChainBorrowInfo = CrossChainBorrowInfo({
+            recipientAddress: _recipient,
+            collateralToken: COLL_WETH,
+            borrowToken: _borrowToken,
+            amount: _borrowAmount,
+            status: BorrowStatus.BORROW_PENDING_TARGET,
+            sourceChainId: block.chainid,
+            targetChainId: 0, // Target chain ID is not known here, but selector is sufficient
+            targetChainSelector: _targetChainSelector,
+            commitmentHash: _commitment,
+            depositor: msg.sender,
+            nullifierHash: _nullifierHash,
+            zkProof: _proof,
+            merkleRoot: privacyPool.getRoot()
+        });
+
+        _sendMessage(COLL_WETH, abi.encode(crossChainBorrowInfo), 200_000);
+    }
+
+    function depositPrivateCollateral(
+        address _collateralToken,
+        uint256 _amount,
+        bytes32 _commitment,
+        bytes calldata _proof
+    ) external {
+        if (_collateralToken != COLL_WETH) revert UnsupportedCollateralToken(_collateralToken);
+
+        if (privacyPool == IPrivacyPool(address(0))) revert PrivacyPoolNotSet();
+        privacyPool.deposit(_commitment, _proof, _collateralToken, _amount);
+
+        privateDeposits[_commitment] = PrivateDepositInfo({collateralToken: _collateralToken, amount: _amount});
+
+        emit CollateralDeposited(msg.sender, _collateralToken, _amount); // Note: msg.sender is the relayer
+    }
+
     function withdrawCollateral(address collateralToken, uint256 amount) external {
         UserCollateralInfo storage uc = userCollateral[msg.sender][collateralToken];
         if (uc.totalDeposited < amount) revert InsufficientCollateral();
-        if (uc.totalBorrowed > 0) revert ActiveDebt();
+
+        address[] memory borrowedTokens = userBorrowedTokens[msg.sender];
+        for (uint256 i = 0; i < borrowedTokens.length; i++) {
+            if (userDebt[msg.sender][borrowedTokens[i]] > 0) {
+                revert ActiveDebt();
+            }
+        }
 
         uc.totalDeposited -= amount;
-        IERC20(collateralToken).safeTransfer(msg.sender, amount);
+        OZERC20(collateralToken).safeTransfer(msg.sender, amount);
 
         emit CollateralWithdrawn(msg.sender, collateralToken, amount);
     }
@@ -156,10 +265,32 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
 
         if (ccbi.status == BorrowStatus.BORROW_PENDING_TARGET) {
             _handleBorrowPending(ccbi);
+        } else if (ccbi.status == BorrowStatus.BORROW_CONFIRMED_TARGET) {
+            // This is the final confirmation from the target chain after disbursing funds.
+            // We need to differentiate between public and private flows.
+            if (ccbi.commitmentHash != bytes32(0)) {
+                // PRIVATE FLOW: This is the first time we're recording the debt for this private borrow.
+                if (privateDeposits[ccbi.commitmentHash].amount == 0) revert NoCollateralFound();
+
+                privateDebt[ccbi.commitmentHash][ccbi.borrowToken] += ccbi.amount;
+
+                emit BorrowRequestFinalizedPrivate(ccbi.commitmentHash, ccbi.amount);
+            } else {
+                if (userCollateral[ccbi.depositor][ccbi.collateralToken].totalDeposited == 0) {
+                    revert NoCollateralFound();
+                }
+
+                userDebt[ccbi.depositor][ccbi.borrowToken] += ccbi.amount;
+
+                if (!_hasDebtInToken[ccbi.depositor][ccbi.borrowToken]) {
+                    _hasDebtInToken[ccbi.depositor][ccbi.borrowToken] = true;
+                    userBorrowedTokens[ccbi.depositor].push(ccbi.borrowToken);
+                }
+                emit BorrowRequestHandledOnSource(ccbi.depositor, ccbi.collateralToken, ccbi.amount);
+            }
         } else if (ccbi.status == BorrowStatus.REPAY_PENDING_TARGET) {
             _handleRepayPending(ccbi);
         }
-        // Other statuses are ignored by this contract
     }
 
     /**
@@ -172,71 +303,57 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
         CrossChainBorrowInfo memory responseCcbi;
 
         if (ccbi.commitmentHash != bytes32(0)) {
-            // ZK Private Borrow Flow
-            // Ensure collateral for ZK borrows is managed by PrivacyPool, not directly here with userCollateral
-            // PrivacyPool.authorizeBorrow will verify the ZK aspects (proof, nullifier, commitment existence)
-            // and ensure the commitment corresponds to sufficient collateral.
+            privateDebt[ccbi.commitmentHash][ccbi.borrowToken] += ccbi.amount;
+            if (!_hasCommitmentDebtInToken[ccbi.commitmentHash][ccbi.borrowToken]) {
+                _hasCommitmentDebtInToken[ccbi.commitmentHash][ccbi.borrowToken] = true;
+                commitmentBorrowedTokens[ccbi.commitmentHash].push(ccbi.borrowToken);
+            }
 
-            // The `ccbi.depositor` in this case might be the PrivacyPool contract itself, or the original EOA
-            // that interacted with PrivacyPool. `authorizeBorrow` uses the commitment to find the deposit.
-            bool success = privacyPool.authorizeBorrow(
-                ccbi.commitmentHash,
-                ccbi.nullifierHash,
-                ccbi.recipientAddress, // recipient on target chain
-                ccbi.amount,           // borrowAmount
-                ccbi.borrowToken,
-                ccbi.targetChainSelector, // Selector for the target chain (BorrowManagement's chain)
-                ccbi.zkProof
+            emit ZKBorrowRequestHandledOnSource(
+                ccbi.commitmentHash, ccbi.recipientAddress, ccbi.borrowToken, ccbi.amount
             );
-            if (!success) revert AuthorizationFailed(ccbi.commitmentHash);
-
-            // Track borrowed amount against the commitment
-            // Note: UserCollateralInfo might need adjustment if ZK deposits aren't directly 'deposited' here
-            // For now, assume PrivacyPool handles the collateral check, and we just track debt.
-            privateUserCollateral[ccbi.commitmentHash].totalBorrowed += ccbi.amount;
-            // We might also want to store ccbi.collateralToken with the commitment if not already implicitly known
-            // privateUserCollateral[ccbi.commitmentHash].token = ccbi.collateralToken; // If UserCollateralInfo stores token
-
-            emit ZKBorrowRequestHandledOnSource(ccbi.commitmentHash, ccbi.recipientAddress, ccbi.collateralToken, ccbi.amount);
 
             responseCcbi = CrossChainBorrowInfo({
-                recipientAddress: ccbi.recipientAddress, // Propagate recipient
-                collateralToken: ccbi.collateralToken,
-                borrowToken: ccbi.borrowToken,
-                amount: ccbi.amount,
                 status: BorrowStatus.BORROW_CONFIRMED_SOURCE,
-                sourceChainId: block.chainid,
-                targetChainId: ccbi.targetChainId,
-                targetChainSelector: ccbi.targetChainSelector, // Propagate selector
-                commitmentHash: ccbi.commitmentHash, // IMPORTANT: Propagate for ZK flow
-                depositor: ccbi.depositor, // Propagate original depositor/initiator if meaningful
-                nullifierHash: ccbi.nullifierHash, // Propagate if needed by target, though likely not for confirmation
-                zkProof: bytes(""), // Proof not needed for confirmation message
-                merkleRoot: ccbi.merkleRoot // Propagate if needed
-            });
-        } else {
-            // Public Borrow Flow (existing logic)
-            bool isAllowed = userCollateral[ccbi.depositor][ccbi.collateralToken].totalDeposited > 0;
-            if (!isAllowed) revert NoCollateralFound();
-
-            userCollateral[ccbi.depositor][ccbi.collateralToken].totalBorrowed += ccbi.amount;
-
-            emit BorrowRequestHandledOnSource(ccbi.depositor, ccbi.collateralToken, ccbi.amount);
-
-            responseCcbi = CrossChainBorrowInfo({
+                depositor: ccbi.depositor,
                 recipientAddress: ccbi.recipientAddress,
                 collateralToken: ccbi.collateralToken,
                 borrowToken: ccbi.borrowToken,
                 amount: ccbi.amount,
-                status: BorrowStatus.BORROW_CONFIRMED_SOURCE,
+                commitmentHash: ccbi.commitmentHash,
+                nullifierHash: ccbi.nullifierHash,
+                zkProof: ccbi.zkProof,
+                merkleRoot: ccbi.merkleRoot,
                 sourceChainId: block.chainid,
                 targetChainId: ccbi.targetChainId,
-                targetChainSelector: ccbi.targetChainSelector, // Propagate selector
-                commitmentHash: bytes32(0), // No commitment for public borrows
+                targetChainSelector: ccbi.targetChainSelector
+            });
+        } else {
+            if (userCollateral[ccbi.depositor][ccbi.collateralToken].totalDeposited == 0) revert NoCollateralFound();
+
+            userDebt[ccbi.depositor][ccbi.borrowToken] += ccbi.amount;
+
+            if (!_hasDebtInToken[ccbi.depositor][ccbi.borrowToken]) {
+                _hasDebtInToken[ccbi.depositor][ccbi.borrowToken] = true;
+                userBorrowedTokens[ccbi.depositor].push(ccbi.borrowToken);
+            }
+
+            emit BorrowRequestHandledOnSource(ccbi.depositor, ccbi.collateralToken, ccbi.amount);
+
+            responseCcbi = CrossChainBorrowInfo({
+                status: BorrowStatus.BORROW_CONFIRMED_SOURCE,
                 depositor: ccbi.depositor,
+                recipientAddress: ccbi.recipientAddress,
+                collateralToken: ccbi.collateralToken,
+                borrowToken: ccbi.borrowToken,
+                amount: ccbi.amount,
+                commitmentHash: bytes32(0),
                 nullifierHash: bytes32(0),
                 zkProof: bytes(""),
-                merkleRoot: bytes32(0)
+                merkleRoot: bytes32(0),
+                sourceChainId: block.chainid,
+                targetChainId: ccbi.targetChainId,
+                targetChainSelector: ccbi.targetChainSelector
             });
         }
 
@@ -248,58 +365,41 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
      * @dev Decreases the user's borrowed amount and sends a confirmation back.
      */
     function _handleRepayPending(CrossChainBorrowInfo memory ccbi) internal {
-        // User repays on BorrowManagement, BorrowManagement sends REPAY_PENDING_TARGET to CollManagement
-        // CollManagement updates user's borrowed amount and sends REPAY_CONFIRMED_SOURCE back to BorrowManagement
         CrossChainBorrowInfo memory responseCcbi;
 
         if (ccbi.commitmentHash != bytes32(0)) {
-            // ZK Private Repay
-            UserCollateralInfo storage puc = privateUserCollateral[ccbi.commitmentHash];
-            if (puc.totalBorrowed < ccbi.amount) {
-                revert RepayMoreThanBorrowedZK(ccbi.commitmentHash, ccbi.borrowToken, ccbi.amount, puc.totalBorrowed);
+            uint256 currentDebt = privateDebt[ccbi.commitmentHash][ccbi.borrowToken];
+            if (currentDebt < ccbi.amount) {
+                revert RepayMoreThanBorrowedZK(ccbi.commitmentHash, ccbi.borrowToken, ccbi.amount, currentDebt);
             }
-            puc.totalBorrowed -= ccbi.amount;
+            privateDebt[ccbi.commitmentHash][ccbi.borrowToken] -= ccbi.amount;
 
-            responseCcbi = CrossChainBorrowInfo({
-                recipientAddress: ccbi.recipientAddress, // This is the original recipient of the ZK borrow
-                collateralToken: ccbi.borrowToken, // For repay, this is the token context
-                borrowToken: ccbi.borrowToken,
-                amount: ccbi.amount,
-                status: BorrowStatus.REPAY_CONFIRMED_SOURCE,
-                sourceChainId: block.chainid,
-                targetChainId: ccbi.targetChainId,
-                targetChainSelector: 0, // Not strictly needed for repay confirmation back to target
-                commitmentHash: ccbi.commitmentHash, // Propagate commitment hash for ZK repay
-                depositor: ccbi.depositor, // Original depositor/initiator
-                nullifierHash: bytes32(0),
-                zkProof: bytes(""),
-                merkleRoot: ccbi.merkleRoot // Propagate from incoming ZK repay message
-            });
-            emit ZKRepayPendingHandledOnSource(ccbi.commitmentHash, ccbi.recipientAddress, ccbi.borrowToken, ccbi.amount);
+            emit ZKRepayPendingHandledOnSource(
+                ccbi.commitmentHash, ccbi.recipientAddress, ccbi.borrowToken, ccbi.amount
+            );
         } else {
-            // Public Repay
-            UserCollateralInfo storage uc = userCollateral[ccbi.depositor][ccbi.collateralToken];
-            if (uc.totalBorrowed < ccbi.amount) {
-                // Ensure this error is defined or use a generic one
-                revert RepayMoreThanBorrowed(ccbi.depositor, ccbi.collateralToken, ccbi.amount, uc.totalBorrowed);
+            uint256 currentDebt = userDebt[ccbi.depositor][ccbi.borrowToken];
+            if (currentDebt < ccbi.amount) {
+                revert RepayMoreThanBorrowed(ccbi.depositor, ccbi.borrowToken, ccbi.amount, currentDebt);
             }
-            uc.totalBorrowed -= ccbi.amount;
+            userDebt[ccbi.depositor][ccbi.borrowToken] -= ccbi.amount;
+
             emit RepayCompletedOnSource(ccbi.depositor, ccbi.collateralToken, ccbi.amount);
 
             responseCcbi = CrossChainBorrowInfo({
+                status: BorrowStatus.REPAY_CONFIRMED_SOURCE,
+                depositor: ccbi.depositor,
                 recipientAddress: ccbi.recipientAddress,
                 collateralToken: ccbi.collateralToken,
                 borrowToken: ccbi.borrowToken,
                 amount: ccbi.amount,
-                status: BorrowStatus.REPAY_CONFIRMED_SOURCE,
-                sourceChainId: block.chainid,
-                targetChainId: ccbi.targetChainId,
-                targetChainSelector: 0, // Not strictly needed for repay confirmation back to target
-                commitmentHash: bytes32(0), // Public repay doesn't use commitment hash
-                depositor: ccbi.depositor,
+                commitmentHash: bytes32(0),
                 nullifierHash: bytes32(0),
                 zkProof: bytes(""),
-                merkleRoot: bytes32(0)
+                merkleRoot: bytes32(0),
+                sourceChainId: block.chainid,
+                targetChainId: ccbi.targetChainId,
+                targetChainSelector: ccbi.targetChainSelector
             });
         }
 
@@ -309,25 +409,31 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
     /**
      * @notice Sends a CCIP message to the target chain.
      */
-    function _sendMessage(address collateralToken, bytes memory data, uint256 gasForDestCall) internal returns (bytes32 messageId) {
-        TargetChainParams storage params = targetChainParams[collateralToken];
-        if (params.borrowManagementContract == address(0)) revert TargetChainNotSet();
+    function _sendMessage(address _collateralToken, bytes memory data, uint256 gasForDestCall) internal {
+        TargetChainParams memory params = targetChainParams[_collateralToken];
 
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(params.borrowManagementContract),
             data: data,
             tokenAmounts: new Client.EVMTokenAmount[](0),
-            extraArgs: Client._argsToBytes(
-                Client.GenericExtraArgsV2({gasLimit: gasForDestCall, allowOutOfOrderExecution: true})
-            ),
+            extraArgs: _getExtraArgs(gasForDestCall),
             feeToken: linkToken
         });
 
         IRouterClient router = IRouterClient(getRouter());
         uint256 fee = router.getFee(params.chainSelector, message);
-        IERC20(linkToken).approve(address(router), fee);
+        if (fee > OZERC20(linkToken).balanceOf(address(this))) {
+            revert NotEnoughLink(fee, OZERC20(linkToken).balanceOf(address(this)));
+        }
 
-        messageId = router.ccipSend(params.chainSelector, message);
+        OZERC20(linkToken).approve(address(router), fee);
+
+        router.ccipSend(params.chainSelector, message);
+    }
+
+    function _getExtraArgs(uint256 gasForDestCall) internal pure returns (bytes memory) {
+        return
+            Client._argsToBytes(Client.GenericExtraArgsV2({gasLimit: gasForDestCall, allowOutOfOrderExecution: true}));
     }
 
     /**
@@ -335,6 +441,144 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable {
      * @dev Useful for managing CCIP fee tokens.
      */
     function transferLinkToken(address to, uint256 amount) external onlyOwner {
-        IERC20(linkToken).transfer(to, amount);
+        OZERC20(linkToken).transfer(to, amount);
     }
+
+    // --- Internal Helper Functions ---
+
+    function _getAmountInUSD(address token, uint256 amount) internal view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(priceFeeds[token]);
+        if (address(priceFeed) == address(0)) {
+            return 0;
+        }
+
+        int256 price;
+        uint8 priceFeedDecimals;
+
+        try priceFeed.latestRoundData() returns (uint80, int256 p, uint256, uint256, uint80) {
+            price = p;
+        } catch {
+            return 0;
+        }
+
+        try priceFeed.decimals() returns (uint8 d) {
+            priceFeedDecimals = d;
+        } catch {
+            return 0;
+        }
+
+        if (price <= 0) {
+            return 0;
+        }
+
+        uint8 tokenDecimals = IERC20withDecimals(token).decimals();
+
+        return (amount * uint256(price) * (10 ** (uint256(18) - priceFeedDecimals))) / (10 ** tokenDecimals);
+    }
+
+    // --- Liquidation Logic ---
+
+    function getHealthFactor(address user) public view returns (uint256) {
+        uint256 totalCollateralValueUSD = 0;
+        uint256 totalDebtValueUSD = 0;
+
+        address[] memory collateralTokens = userDepositedCollaterals[user];
+        for (uint256 i = 0; i < collateralTokens.length; i++) {
+            address collateralToken = collateralTokens[i];
+            uint256 collateralAmount = userCollateral[user][collateralToken].totalDeposited;
+            if (collateralAmount > 0) {
+                totalCollateralValueUSD += _getAmountInUSD(collateralToken, collateralAmount);
+            }
+        }
+
+        address[] memory debtTokens = userBorrowedTokens[user];
+        for (uint256 i = 0; i < debtTokens.length; i++) {
+            address debtToken = debtTokens[i];
+            uint256 debtAmount = userDebt[user][debtToken];
+            if (debtAmount > 0) {
+                totalDebtValueUSD += _getAmountInUSD(debtToken, debtAmount);
+            }
+        }
+
+        bytes32[] memory commitments = userCommitments[user];
+        for (uint256 i = 0; i < commitments.length; i++) {
+            bytes32 commitment = commitments[i];
+            PrivateDepositInfo storage depositInfo = privateDeposits[commitment];
+            if (depositInfo.amount > 0) {
+                totalCollateralValueUSD += _getAmountInUSD(depositInfo.collateralToken, depositInfo.amount);
+            }
+
+            address[] memory commitmentTokens = commitmentBorrowedTokens[commitment];
+            for (uint256 j = 0; j < commitmentTokens.length; j++) {
+                address debtToken = commitmentTokens[j];
+                uint256 debtAmount = privateDebt[commitment][debtToken];
+                if (debtAmount > 0) {
+                    totalDebtValueUSD += _getAmountInUSD(debtToken, debtAmount);
+                }
+            }
+        }
+
+        if (totalDebtValueUSD == 0) {
+            return type(uint256).max; // No debt, health is infinite
+        }
+
+        return (totalCollateralValueUSD * 1e18) / totalDebtValueUSD;
+    }
+
+    function isLiquidatable(address user) public view returns (bool) {
+        uint256 health = getHealthFactor(user);
+        if (health == type(uint256).max) return false;
+
+        uint256 requiredHealth = (liquidationThreshold * 1e18) / 100;
+        return health < requiredHealth;
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override(AccessControl, CCIPReceiver) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    function getPriceFeed(address token) public view returns (address) {
+        return address(priceFeeds[token]);
+    }
+
+
+    function issueDebtForTest(address user, address debtToken, uint256 amount) external onlyRole(DEBT_ISSUER_ROLE) {
+        userDebt[user][debtToken] = amount;
+        if (!_hasDebtInToken[user][debtToken] && amount > 0) {
+            _hasDebtInToken[user][debtToken] = true;
+            userBorrowedTokens[user].push(debtToken);
+        }
+    }
+
+    function liquidateCollateral(address user, address debtToken, uint256 repayAmount) external {
+        if (!isLiquidatable(user)) revert HealthFactorNotBelowThreshold();
+
+        uint256 userDebtForToken = userDebt[user][debtToken];
+        if (userDebtForToken == 0) revert NoDebtToRepay();
+        if (repayAmount > userDebtForToken) {
+            revert RepayMoreThanBorrowed(user, debtToken, repayAmount, userDebtForToken);
+        }
+
+        OZERC20(debtToken).safeTransferFrom(msg.sender, address(this), repayAmount);
+
+        uint256 repaidValueUSD = _getAmountInUSD(debtToken, repayAmount);
+
+        uint256 collateralToSeizeValueUSD = (repaidValueUSD * (100 + liquidationBonus)) / 100;
+        address collateralToken = COLL_WETH;
+        UserCollateralInfo storage uc = userCollateral[user][collateralToken];
+
+        uint256 collateralTokenPriceUSD = _getAmountInUSD(collateralToken, 1e18); // Price of 1 full collateral token
+        uint256 collateralAmountToSeize = (collateralToSeizeValueUSD * 1e18) / collateralTokenPriceUSD;
+
+        if (uc.totalDeposited < collateralAmountToSeize) revert InsufficientCollateral();
+
+        userDebt[user][debtToken] -= repayAmount;
+        uc.totalDeposited -= collateralAmountToSeize;
+
+        OZERC20(collateralToken).transfer(msg.sender, collateralAmountToSeize);
+
+        emit Liquidation(msg.sender, user, collateralToken, collateralAmountToSeize);
+    }
+
+
 }

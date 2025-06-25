@@ -57,4 +57,6 @@ interface IPrivacyPool {
         uint64 targetChainSelector, // CCIP Target Chain Selector
         bytes calldata proof
     ) external returns (bool success);
+
+    function getRoot() external view returns (bytes32);
 }

@@ -69,8 +69,8 @@ contract PrivacyPool is IPrivacyPool, Ownable {
         bytes32 nullifierHash,
         address recipient, // Renamed
         uint256 borrowAmount,
-        address borrowToken,
-        uint64 targetChainSelector, // Added
+        address, /*borrowToken*/
+        uint64, /*targetChainSelector*/ // Added
         bytes calldata proof // Renamed
     ) external override returns (bool success) {
         require(!nullifiers[nullifierHash], "Nullifier has already been used");
@@ -83,7 +83,8 @@ contract PrivacyPool is IPrivacyPool, Ownable {
             uint256(uint160(recipient)), // <<< Use new 'recipient'
             borrowAmount
         ];
-        if (!_verifyBorrow(publicInputs, proof)) { // <<< Use new 'proof'
+        if (!_verifyBorrow(publicInputs, proof)) {
+            // <<< Use new 'proof'
             return false;
         }
 
@@ -98,8 +99,6 @@ contract PrivacyPool is IPrivacyPool, Ownable {
 
     /**
      * @dev Builds the CCIP message for authorizing a borrow on a target chain.
-     * @param _recipientOnTarget The address of the recipient on the target chain.
-     * @param _borrowAmount The amount to be borrowed.
      * @param _borrowToken The token to be borrowed.
      * @param _depositCommitment The user's original deposit commitment.
      * @param _nullifierHash The nullifier to prevent double-spending.
@@ -109,7 +108,7 @@ contract PrivacyPool is IPrivacyPool, Ownable {
      * @return The CCIP message.
      */
     function _buildCCIPMessage(
-        address _recipientOnTarget,
+        address, /*_recipientOnTarget*/
         uint256 _borrowAmount,
         address _borrowToken,
         bytes32 _depositCommitment,
@@ -139,19 +138,20 @@ contract PrivacyPool is IPrivacyPool, Ownable {
         address targetReceiverContract = targetReceivers[_targetChainSelector];
         require(targetReceiverContract != address(0), "Target receiver not configured");
 
-        return
-            Client.EVM2AnyMessage({
-                receiver: abi.encode(targetReceiverContract),
-                data: encodedData,
-                tokenAmounts: new Client.EVMTokenAmount[](0),
-                feeToken: address(s_link),
-                extraArgs: Client._argsToBytes(Client.GenericExtraArgsV2({gasLimit: 0, allowOutOfOrderExecution: true}))
-            });
+        return Client.EVM2AnyMessage({
+            receiver: abi.encode(targetReceiverContract),
+            data: encodedData,
+            tokenAmounts: new Client.EVMTokenAmount[](0),
+            feeToken: address(s_link),
+            extraArgs: Client._argsToBytes(Client.GenericExtraArgsV2({gasLimit: 0, allowOutOfOrderExecution: true}))
+        });
     }
 
-    function _unpackProof(
-        bytes calldata _proof
-    ) internal pure returns (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) {
+    function _unpackProof(bytes calldata _proof)
+        internal
+        pure
+        returns (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c)
+    {
         require(_proof.length == 8 * 32, "Invalid proof length");
         assembly {
             let ptr := _proof.offset // Get start of _proof in calldata
@@ -175,10 +175,7 @@ contract PrivacyPool is IPrivacyPool, Ownable {
         }
     }
 
-    function _verifyBorrow(
-        uint256[4] memory _publicInputs,
-        bytes calldata _proof
-    ) internal view returns (bool) {
+    function _verifyBorrow(uint256[4] memory _publicInputs, bytes calldata _proof) internal view returns (bool) {
         if (!ENABLE_ZK_BORROW_CHECK) {
             return true; // Bypass ZK proof verification if flag is disabled
         }

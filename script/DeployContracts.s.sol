@@ -8,7 +8,6 @@ import {CollManagement} from "src/core/coll/CollManagement.sol";
 import {MockERC20, ERC20} from "test/mock/MockERC20.sol";
 import {PrivacyPool} from "src/core/privacy/PrivacyPool.sol";
 
-
 // mockCollateralWETH : necessary praparation for the CollManagement and BorrowManagement
 // PrivacyPool for the source  chain
 // https://sepolia.etherscan.io/search?q=
@@ -16,11 +15,11 @@ import {PrivacyPool} from "src/core/privacy/PrivacyPool.sol";
 // mockCollateralWETH https://sepolia.etherscan.io/address/0xb8F551189a9E15988C05EA29d4e3Cf8e39eD6BFE#code
 
 contract DeployPrepareContractForSourceChain is Script, Helper {
-    function run(uint256 blockChainID) external {
+        function run(uint256 blockChainID) external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        MockERC20 mockCollateralWETH = new MockERC20("Mock Collateral ETH", "WETH");
+        MockERC20 mockCollateralWETH = new MockERC20("Mock Collateral ETH", "WETH", 18);
         PrivacyPool privacyPool = new PrivacyPool(20, address(0), address(0), address(0), true); // ENABLE_ZK_BORROW_CHECK = true for deployment;
 
         console.log(
@@ -46,7 +45,7 @@ contract DeployPrepareContractForTargetChain is Script, Helper {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        MockERC20 mockBorrowUSDC = new MockERC20("Mock Borrow USDC", "USDC");
+        MockERC20 mockBorrowUSDC = new MockERC20("Mock Borrow USDC", "USDC", 6);
         PrivacyPool privacyPool = new PrivacyPool(20, address(0), address(0), address(0), true); // ENABLE_ZK_BORROW_CHECK = true for deployment;
 
         console.log(
@@ -75,26 +74,22 @@ contract DeployPrepareContractForTargetChain is Script, Helper {
 contract DeployCollManagementSender is Script, Helper {
     uint256 public immutable COLLATERAL_RATIO = 15_000_000_000_000_000_000; // collateral ratio, 150%
 
-    // TODO should input chainID
     function run(
         uint256 sourceBlockChainID,
-        uint256 targetBlockChainID,
         address sourceCollateralToken,
-        address targetBorrowUSDC,
-        address privacyPool_source_chain
+        address sourceChainPrivacyPool
     ) external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
         (address sourceRouter, address link,,) = getConfigFromNetwork(sourceBlockChainID);
 
-        (address ETH_USD_PRICE_FEED, address USDC_USD_PRICE_FEED) = getPriceFeeds(sourceBlockChainID);
         CollManagement sender_collManagement = new CollManagement(
-            sourceCollateralToken, // _collateralToken
-            sourceRouter,          // _router
-            link,                  // _linkToken
-            privacyPool_source_chain // _privacyPoolAddress
+            sourceRouter, // _router
+            link, // _linkToken
+            sourceCollateralToken // _weth
         );
+        sender_collManagement.setPrivacyPool(sourceChainPrivacyPool);
         console.log(
             "CollManagement contract deployed on ",
             networks[sourceBlockChainID],
@@ -120,9 +115,9 @@ contract DeployBorrowManagementReceiver is Script, Helper {
         (address targetRouter, address linkToken,,) = getConfigFromNetwork(targetBlockChainID);
 
         BorrowManagement receiver_borrowManagement = new BorrowManagement(
-            targetBorrowUSDC,      // _borrowToken
-            targetRouter,          // _router
-            linkToken,             // _linkToken
+            targetBorrowUSDC, // _borrowToken
+            targetRouter, // _router
+            linkToken, // _linkToken
             targetChainPrivacyPool // _privacyPoolAddress
         );
         console.log(
@@ -167,7 +162,7 @@ contract SetRouterForStratoLendNetWorkForTarget is Script, Helper {
         address receiver_borrowManagement,
         address targetBorrowUSDC,
         uint256 sourceBlockChainID, // ID of the source chain
-        uint256 targetBlockChainID  // ID of the target chain (current chain)
+        uint256 targetBlockChainID // ID of the target chain (current chain)
     ) external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
@@ -176,11 +171,11 @@ contract SetRouterForStratoLendNetWorkForTarget is Script, Helper {
         (,,, uint64 ownChainSelector_for_target) = getConfigFromNetwork(targetBlockChainID); // This is the target's own selector
 
         BorrowManagement(receiver_borrowManagement).setSourceChainParams(
-            targetBorrowUSDC,              // _collateralToken (which is borrow token for BorrowManagement)
-            sourceBlockChainID,            // _sourceChainId
-            sourceChainSelector,           // _sourceChainSelector
-            sender_collManagement,         // _sourceChainCollManager
-            ownChainSelector_for_target    // _ownChainSelector
+            targetBorrowUSDC, // _collateralToken (which is borrow token for BorrowManagement)
+            sourceBlockChainID, // _sourceChainId
+            sourceChainSelector, // _sourceChainSelector
+            sender_collManagement, // _sourceChainCollManager
+            ownChainSelector_for_target // _ownChainSelector
         );
         vm.stopBroadcast();
     }

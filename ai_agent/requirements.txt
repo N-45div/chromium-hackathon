@@ -1,7 +1,0 @@
-web3==6.12.0
-requests==2.31.0
-python-dotenv==1.0.1
-pandas==2.2.0
-numpy==1.26.3
-# scikit-learn==1.4.0
-# Add other dependencies as needed, e.g., for specific ML frameworks or data sources

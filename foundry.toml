@@ -8,7 +8,12 @@ optimizer_runs = 20000
 fs_permissions = [{ access = "read", path = "lib/foundry-chainlink-toolkit/out"}]
 solc_version = "0.8.30"
 via_ir = true
+allow_paths = ["test"]
 
 # Remappings in remappings.txt
 
 # See more config options https://github.com/gakonst/foundry/tree/master/config
+
+[rpc_endpoints]
+sepolia = "${SEPOLIA_RPC_URL}"
+fuji = "${AVALANCHE_FUJI_RPC_URL}"
