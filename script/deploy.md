@@ -79,6 +79,22 @@ Before testing, you must:
 
 ---
 
+## Contract Verification
+
+If you need to re-verify the contracts, use the following commands. Ensure your `ETHERSCAN_API_KEY` is set as an environment variable for the Sepolia command.
+
+**Sepolia (CollManagement):**
+```bash
+forge verify-contract --chain sepolia --verifier etherscan 0xd4aa953485eF4f1A916e42b9350Ab510f0920465 src/core/coll/CollManagement.sol:CollManagement --compiler-version 0.8.30 --constructor-args $(cast abi-encode "constructor(address,address,address)" 0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59 0x779877A7B0D9E8603169DdbD7836e478b4624789 0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764)
+```
+
+**Avalanche Fuji (BorrowManagement):**
+```bash
+forge verify-contract --chain fuji --verifier-url https://api.routescan.io/v2/network/testnet/evm/43113/etherscan 0xb00a914c79ba90b762Fa9B6306048579ceFfE6Dc src/core/borrow/BorrowManagement.sol:BorrowManagement --compiler-version 0.8.30 --constructor-args $(cast abi-encode "constructor(address,address,address,address)" 0x5425890298a76a5fDE71C00E1554ebb843aB41d2 0xF694E193200268f9a4868e4Aa017A0118C9a8177 0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846 0x054a8677aEe0343939463ac06A4d2104D3687A78)
+```
+
+---
+
 ## How to Perform a Cross-Chain Transaction
 
 ### 1. Deposit Collateral (Sepolia)
