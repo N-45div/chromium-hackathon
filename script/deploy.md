@@ -12,9 +12,9 @@ This document outlines the deployment process for the cross-chain lending protoc
 
 ### Avalanche Fuji (Target Chain - Chain ID: 43113)
 
-*   **`BorrowManagement`**: [`0xb00a914c79ba90b762Fa9B6306048579ceFfE6Dc`](https://testnet.snowtrace.io/address/0xb00a914c79ba90b762Fa9B6306048579ceFfE6Dc)
-*   **`PrivacyPool`**: [`0x054a8677aEe0343939463ac06A4d2104D3687A78`](https://testnet.snowtrace.io/address/0x054a8677aEe0343939463ac06A4d2104D3687A78)
-*   **`mockBorrowUSDC`**: [`0x5425890298a76a5fDE71C00E1554ebb843aB41d2`](https://testnet.snowtrace.io/address/0x5425890298a76a5fDE71C00E1554ebb843aB41d2)
+*   **`BorrowManagement`**: [`0xae4E4BDdE6Eb2F040aB9d34EA74086b3a8311389`](https://testnet.snowtrace.io/address/0xae4E4BDdE6Eb2F040aB9d34EA74086b3a8311389)
+*   **`PrivacyPool`**: [`0x042e5B9A43a48f5574E0ee2DD3685CB741E82c96`](https://testnet.snowtrace.io/address/0x042e5B9A43a48f5574E0ee2DD3685CB741E82c96)
+*   **`mockBorrowUSDC`**: [`0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1`](https://testnet.snowtrace.io/address/0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1)
 
 ---
 
@@ -90,7 +90,7 @@ forge verify-contract --chain sepolia --verifier etherscan 0xd4aa953485eF4f1A916
 
 **Avalanche Fuji (BorrowManagement):**
 ```bash
-forge verify-contract --chain fuji --verifier-url https://api.routescan.io/v2/network/testnet/evm/43113/etherscan 0xb00a914c79ba90b762Fa9B6306048579ceFfE6Dc src/core/borrow/BorrowManagement.sol:BorrowManagement --compiler-version 0.8.30 --constructor-args $(cast abi-encode "constructor(address,address,address,address)" 0x5425890298a76a5fDE71C00E1554ebb843aB41d2 0xF694E193200268f9a4868e4Aa017A0118C9a8177 0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846 0x054a8677aEe0343939463ac06A4d2104D3687A78)
+forge verify-contract --chain fuji --verifier-url https://api.routescan.io/v2/network/testnet/evm/43113/etherscan 0xae4E4BDdE6Eb2F040aB9d34EA74086b3a8311389 src/core/borrow/BorrowManagement.sol:BorrowManagement --compiler-version 0.8.30 --constructor-args $(cast abi-encode "constructor(address,address,address,address)" 0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1 0xF694E193200268f9a4868e4Aa017A0118C9a8177 0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846 0x042e5B9A43a48f5574E0ee2DD3685CB741E82c96)
 ```
 
 ---
