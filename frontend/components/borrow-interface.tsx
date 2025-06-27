@@ -6,34 +6,101 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { AlertTriangle } from "lucide-react"
+import {ethers} from 'ethers'
+import BorrowManagementABI from '../../abi/BorrowManagement.json'
 
-const borrowTokens = [{ symbol: "USDC", name: "USD Coin", apy: "8.5%", available: "18750" }]
+const BORROW_MANAGEMENT_ADDRESS = "0xd4aa953485eF4f1A916e42b9350Ab510f0920465"
+const BORROW_USDC = '0x5425890298a76a5fDE71C00E1554ebb843aB41d2'
+const CHAIN_IDS = {
+  FUJI: 43113
+}
+//const borrowTokens = [{ symbol: "USDC", name: "USD Coin", apy: "8.5%", available: "18750" }]
 
 export function BorrowInterface() {
   const [selectedToken, setSelectedToken] = useState("")
   const [amount, setAmount] = useState("")
+  const [available, setAvailable] = useState('0')
+  const [isCorrectChain, setIsCorrectChain] = useState(false)
   const { toast } = useToast()
 
-  const handleBorrow = () => {
+  useEffect(() => {
+    const fetchAvailable = async () => {
+      if (!window.ethereum) return
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const signer = await provider.getSigner()
+        const userAddress = await signer.getAddress()
+        const network = provider.getNetwork()
+        const chainId = Number(network.chainId)
+
+        if (chainId !== CHAIN_IDS.FUJI) {
+          toast({title: "Error", description: "Please switch to Avalanche Fuji", variant: "destructive"})
+          return
+        }
+        setIsCorrectChain(true)
+
+        const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI, provider)
+        const balanceInfo = await contract.availableBorrowTokenBalance(userAddress)
+        const decimals = 6 //USDC decimals
+        setAvailable(ethers.formatUnits(balanceInfo.borrowedAmoun, decimals))
+      } catch (error) {
+        console.error("Error fetching available borrow: ", error)
+        toast({title: "Error", description: "Failed to fetch available borrow amount", variant: "destructive"})
+      }
+    }
+    fetchAvailable()
+  }, [])
+
+  // const handleBorrow = () => {
+  //   if (!selectedToken || !amount) {
+  //     toast({
+  //       title: "Error",
+  //       description: "Please select a token and enter an amount",
+  //       variant: "destructive",
+  //     })
+  //     return
+  //   }
+
+  //   toast({
+  //     title: "Borrow Request Initiated",
+  //     description: `Borrowing ${amount} ${selectedToken}`,
+  //   })
+  // }
+
+  const handleBorrow = async () => {
     if (!selectedToken || !amount) {
-      toast({
-        title: "Error",
-        description: "Please select a token and enter an amount",
-        variant: "destructive",
-      })
+      toast({title: "Error", description: "Please select a token and enter an amount", variant: "destructive"})
       return
     }
-
-    toast({
-      title: "Borrow Request Initiated",
-      description: `Borrowing ${amount} ${selectedToken}`,
-    })
+    if (!isCorrectChain) {
+      toast({title: "Error", description: "Please switch to Avalanche Fuji", variant: "destructive"})
+      return
+    }
+    try {
+      if (!window.ethereum) throw new Error("MetaMask not found")
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI, signer)
+      const parsedAmount = ethers.parseUnits(available, 6)
+      if (parsedAmount > availableAmount) {
+        toast({title: "Error", description: "Borrow amount exceeds available balance", variant: "destructive"})
+        return
+      }
+      const tx = await contract.borrowApply(parsedAmount, {gasLimit: 500000})
+      toast({title: "Borrow Request Sent", description: `Tx Hash: ${tx.hash}`})
+      await tx.wait()
+      toast({title: "Borrow Confirmed", description: `Borrowed: ${amount} USDC`})
+    } catch (error: any) {
+      console.error("Borrow error: ", error)
+      toast({title: "Borrow Failed", description: error.reason || error.message || "An unexpected error occurred", variant: "destructive"})
+    }
   }
 
-  const selectedTokenData = borrowTokens.find((t) => t.symbol === selectedToken)
+
+//  const selectedTokenData = borrowTokens.find((t) => t.symbol === selectedToken)
   const healthFactor = amount ? (2.45 - Number.parseFloat(amount) / 50000).toFixed(2) : "2.45"
   const liquidationPrice = amount ? (1800 - Number.parseFloat(amount) / 10).toFixed(0) : "1800"
 
@@ -50,14 +117,12 @@ export function BorrowInterface() {
               <SelectValue placeholder="Select token to borrow" />
             </SelectTrigger>
             <SelectContent className="bg-slate-700 border-slate-600">
-              {borrowTokens.map((token) => (
-                <SelectItem key={token.symbol} value={token.symbol} className="text-white hover:bg-slate-600">
-                  <div className="flex items-center justify-between w-full">
-                    <span>{token.name}</span>
-                    <span className="text-teal-400 ml-2">{token.apy}</span>
-                  </div>
-                </SelectItem>
-              ))}
+              <SelectItem value="USDC" className="text-white hover:bg-slate-600">
+                <div className="flex items-center justify-between w-full">
+                  <span>USD Coin</span>
+                  <span className="text-teal-400 ml-2">8.5%</span>
+                </div>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -77,16 +142,12 @@ export function BorrowInterface() {
               variant="ghost"
               size="sm"
               className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-400 hover:text-teal-300"
-              onClick={() => selectedTokenData && setAmount(selectedTokenData.available)}
+              onClick={() => setAmount(available)}
             >
               MAX
             </Button>
           </div>
-          {selectedTokenData && (
-            <p className="text-sm text-gray-400">
-              Available: ${selectedTokenData.available} {selectedToken}
-            </p>
-          )}
+          <p className="text-sm text-gray-400">Available: {available} USDC</p>
         </div>
 
         {selectedToken && amount && (
@@ -111,7 +172,7 @@ export function BorrowInterface() {
               <h4 className="text-white font-medium">Loan Terms</h4>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">Interest Rate</span>
-                <span className="text-white">{selectedTokenData?.apy}</span>
+                <span className="text-white">8.5%</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">Liquidation Price</span>
@@ -123,8 +184,7 @@ export function BorrowInterface() {
               <Alert className="border-yellow-500 bg-yellow-500/10">
                 <AlertTriangle className="h-4 w-4 text-yellow-500" />
                 <AlertDescription className="text-yellow-200">
-                  Warning: This borrow amount will significantly reduce your health factor. Consider borrowing less to
-                  maintain a safer position.
+                  Warning: This borrow amount will significantly reduce your health factor. Consider borrowing less to maintain a safer position.
                 </AlertDescription>
               </Alert>
             )}
@@ -134,9 +194,9 @@ export function BorrowInterface() {
         <Button
           onClick={handleBorrow}
           className="w-full bg-orange-600 hover:bg-orange-700"
-          disabled={!selectedToken || !amount}
+          disabled={!selectedToken || !amount || !isCorrectChain}
         >
-          Borrow {selectedToken}
+          Borrow USDC
         </Button>
       </CardContent>
     </Card>

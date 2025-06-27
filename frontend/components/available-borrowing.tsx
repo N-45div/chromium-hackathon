@@ -4,6 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TrendingUp, TrendingDown } from "lucide-react"
+import {useState, useEffect} from 'react'
+import { useToast } from "@/hooks/use-toast"
+import { ethers } from 'ethers'
+import BorrowManagementABI from '../../abi/BorrowManagement.json'
+
+const BORROW_MANAGEMENT_ADDRESS = "0xd4aa953485eF4f1A916e42b9350Ab510f0920465"
+const BORROW_USDC = '0x5425890298a76a5fDE71C00E1554ebb843aB41d2'
+const CHAIN_IDS = {
+  FUJI: 43113
+}
 
 const borrowingOptions = [
   {
@@ -33,54 +43,62 @@ const borrowingOptions = [
 ]
 
 export function AvailableBorrowing() {
+  const [available, setAvailable] = useState('0')
+  const [collateralInfo, setCollateralInfo] = useState({collateralToken: '', amount: '0'})
+  const {toast} = useToast()
+
+  useEffect(() => {
+    const fetchAvailable = async () => {
+      if (!window.ethereum) return
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const signer = await provider.getSigner()
+        const userAddress = await signer.getAddress()
+        const network = await provider.getNetwork()
+        const chainId = Number(network.chainId)
+
+        if (chainId !== CHAIN_IDS.FUJI) {
+          toast({title: "Error", description: "Please switch to Avalanche Fuji", variant: "destructive"})
+          return
+        }
+
+        const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI, provider)
+        const balanceInfo = await contract.availableBorrowTokenBalance(userAddress)
+        const decimals = 6 //USDC decimals
+        setAvailable(ethers.formatUnits(balanceInfo.borrowedAmount, decimals))
+        setCollateralInfo({
+          collateralToken: balanceInfo.collateralToken,
+          amount: ethers.formatUnits(balanceInfo.borrowedAmount.mul(75).div(100), decimals) //75% collateral ratio like in CollManagement.sol
+        })
+      } catch (error) {
+        console.error("Error fetching available borrow: ", error)
+        toast({title: "Error", description: "Failed to fetch available borrow amount", variant: "destructive"})
+      }
+ 
+ fetchBalance()   }
+  }, [])
+
   return (
     <Card className="bg-slate-800/50 backdrop-blur-sm border-slate-700">
       <CardHeader>
-        <CardTitle className="text-white">Available Borrowing Capacity</CardTitle>
+        <CardTitle className="text-white">Available Borrowing</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {borrowingOptions.map((option, index) => (
-            <div
-              key={index}
-              className="p-4 bg-slate-700/50 rounded-lg border border-slate-600 hover:border-teal-500/50 transition-colors"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <Badge variant="outline" className="border-teal-500 text-teal-400">
-                  {option.chain}
-                </Badge>
-                <div className="flex items-center space-x-1">
-                  {option.trend === "up" ? (
-                    <TrendingUp className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 text-red-400" />
-                  )}
-                  <span className={`text-sm ${option.trend === "up" ? "text-green-400" : "text-red-400"}`}>
-                    {option.apy}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Token</span>
-                  <span className="text-white">{option.token}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Available</span>
-                  <span className="text-white font-medium">{option.available}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Capacity Used</span>
-                  <span className="text-teal-400">{option.capacity}</span>
-                </div>
-              </div>
-
-              <Button size="sm" className="w-full bg-orange-600 hover:bg-orange-700">
-                Borrow {option.token}
-              </Button>
-            </div>
-          ))}
+      <CardContent className="space-y-4">
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-400">Borrow Token</span>
+          <span className="text-white">USDC</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-400">Available to Borrow</span>
+          <span className="text-teal-400">{available} USDC</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-400">Collateral Token</span>
+          <span className="text-white">{collateralInfo.collateralToken || "None"}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-400">Collateral Value</span>
+          <span className="text-white">{collateralInfo.amount} USDC</span>
         </div>
       </CardContent>
     </Card>

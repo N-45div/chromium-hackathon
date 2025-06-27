@@ -10,7 +10,7 @@ export function Hero() {
     <div className="relative overflow-hidden">
       {/* Animated background */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-teal-900">
-        <div className="absolute inset-0 bg-[url('/placeholder.svg?height=800&width=1200')] opacity-10 bg-cover bg-center" />
+        {/* <div className="absolute inset-0 bg-[url('/placeholder.svg?height=800&width=1200')] opacity-10 bg-cover bg-center" /> */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent" />
       </div>
 
@@ -23,9 +23,9 @@ export function Hero() {
             </div>
           </div>
 
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
+          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white leading-tight">
             Cross-Chain Lending
-            <span className="block bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent">
+            <span className="block bg-gradient-to-r from-teal-400 to-cyan-400 h-[90px] bg-clip-text text-transparent">
               Reimagined
             </span>
           </h1>
