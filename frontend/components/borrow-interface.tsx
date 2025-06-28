@@ -6,101 +6,111 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { AlertTriangle } from "lucide-react"
-import {ethers} from 'ethers'
-import BorrowManagementABI from '../../abi/BorrowManagement.json'
+import { ethers } from "ethers"
+import BorrowManagementABI from "../../abi/BorrowManagement.json"
+import CollManagementABI from "../../abi/CollManagement.json"
 
-const BORROW_MANAGEMENT_ADDRESS = "0xd4aa953485eF4f1A916e42b9350Ab510f0920465"
-const BORROW_USDC = '0x5425890298a76a5fDE71C00E1554ebb843aB41d2'
-const CHAIN_IDS = {
-  FUJI: 43113
-}
-//const borrowTokens = [{ symbol: "USDC", name: "USD Coin", apy: "8.5%", available: "18750" }]
+const BORROW_MANAGEMENT_ADDRESS = "0xae4E4BDdE6Eb2F040aB9d34EA74086b3a8311389"
+const BORROW_USDC = "0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1"
+const CHAIN_IDS = { FUJI: 43113, SEPOLIA: 11155111 }
 
 export function BorrowInterface() {
   const [selectedToken, setSelectedToken] = useState("")
   const [amount, setAmount] = useState("")
-  const [available, setAvailable] = useState('0')
+  const [available, setAvailable] = useState("0")
   const [isCorrectChain, setIsCorrectChain] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
-    const fetchAvailable = async () => {
-      if (!window.ethereum) return
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum)
-        const signer = await provider.getSigner()
-        const userAddress = await signer.getAddress()
-        const network = provider.getNetwork()
-        const chainId = Number(network.chainId)
+  const fetchAvailable = useCallback(async () => {
+    if (!window.ethereum) return
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const userAddress = await signer.getAddress()
+      const network = await provider.getNetwork()
+      const chainId = Number(network.chainId)
 
-        if (chainId !== CHAIN_IDS.FUJI) {
-          toast({title: "Error", description: "Please switch to Avalanche Fuji", variant: "destructive"})
-          return
-        }
-        setIsCorrectChain(true)
-
-        const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI, provider)
-        const balanceInfo = await contract.availableBorrowTokenBalance(userAddress)
-        const decimals = 6 //USDC decimals
-        setAvailable(ethers.formatUnits(balanceInfo.borrowedAmoun, decimals))
-      } catch (error) {
-        console.error("Error fetching available borrow: ", error)
-        toast({title: "Error", description: "Failed to fetch available borrow amount", variant: "destructive"})
+      if (chainId !== CHAIN_IDS.SEPOLIA) {
+        toast({ title: "Error", description: `Please switch to Sepolia (Chain ID: ${CHAIN_IDS.SEPOLIA}) for collateral data`, variant: "destructive" })
+        return
       }
+      setIsCorrectChain(true)
+
+      // Check borrow initialization on Fuji
+      const fujiProvider = new ethers.JsonRpcProvider("https://api.avax-test.network/ext/bc/C/rpc")
+      const borrowContract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, fujiProvider)
+      const balanceInfo = await borrowContract.availableBorrowTokenBalance(userAddress)
+      if (balanceInfo.status !== 1) { // BorrowStatus.INITIAL
+        toast({ title: "Error", description: "Borrow not initialized. Please deposit collateral on Sepolia first.", variant: "destructive" })
+        return
+      }
+      setIsInitialized(true)
+
+      const sepoliaProvider = new ethers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com")
+      const collContract = new ethers.Contract(
+        "0xd4aa953485eF4f1A916e42b9350Ab510f0920465",
+        CollManagementABI.abi,
+        sepoliaProvider
+      )
+      const collateralInfo = await collContract.userCollateral(userAddress, "0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764")
+      const priceFeedAddress = await collContract.getPriceFeed("0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764")
+      const wethAmount = ethers.formatUnits(collateralInfo.totalDeposited, 18)
+      let wethPriceUSD = 0
+      const priceFeed = new ethers.Contract(
+        priceFeedAddress === ethers.ZeroAddress ? "0x694AA1769357215DE4FAC081bf1f309aDC325306" : priceFeedAddress,
+        ["function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)", "function decimals() view returns (uint8)"],
+        sepoliaProvider
+      )
+      const [, price, , ,] = await priceFeed.latestRoundData()
+      const priceFeedDecimals = await priceFeed.decimals()
+      wethPriceUSD = Number(ethers.formatUnits(price, priceFeedDecimals))
+      const collateralValueUSD = Number(wethAmount) * wethPriceUSD
+      const creditLimit = collateralValueUSD / 1.5
+      setAvailable(creditLimit.toFixed(6))
+    } catch (error) {
+      console.error("Error fetching available borrow: ", error)
+      toast({ title: "Error", description: "Failed to fetch available borrow amount", variant: "destructive" })
     }
-    fetchAvailable()
   }, [])
 
-  // const handleBorrow = () => {
-  //   if (!selectedToken || !amount) {
-  //     toast({
-  //       title: "Error",
-  //       description: "Please select a token and enter an amount",
-  //       variant: "destructive",
-  //     })
-  //     return
-  //   }
-
-  //   toast({
-  //     title: "Borrow Request Initiated",
-  //     description: `Borrowing ${amount} ${selectedToken}`,
-  //   })
-  // }
+  useEffect(() => {
+    fetchAvailable()
+  }, [fetchAvailable])
 
   const handleBorrow = async () => {
-    if (!selectedToken || !amount) {
-      toast({title: "Error", description: "Please select a token and enter an amount", variant: "destructive"})
-      return
-    }
-    if (!isCorrectChain) {
-      toast({title: "Error", description: "Please switch to Avalanche Fuji", variant: "destructive"})
+    if (!selectedToken || !amount || !isCorrectChain || !isInitialized) {
+      toast({ title: "Error", description: "Please select a token, enter an amount, connect to Sepolia for UI, and ensure borrow is initialized", variant: "destructive" })
       return
     }
     try {
       if (!window.ethereum) throw new Error("MetaMask not found")
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
-      const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI, signer)
-      const parsedAmount = ethers.parseUnits(available, 6)
-      if (parsedAmount > availableAmount) {
-        toast({title: "Error", description: "Borrow amount exceeds available balance", variant: "destructive"})
+      const network = await provider.getNetwork()
+      if (Number(network.chainId) !== CHAIN_IDS.FUJI) {
+        toast({ title: "Error", description: `Please switch to Fuji (Chain ID: ${CHAIN_IDS.FUJI}) for borrowing`, variant: "destructive" })
         return
       }
-      const tx = await contract.borrowApply(parsedAmount, {gasLimit: 500000})
-      toast({title: "Borrow Request Sent", description: `Tx Hash: ${tx.hash}`})
+      const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, signer)
+      const parsedAmount = ethers.parseUnits(amount, 6)
+      if (Number(parsedAmount) > Number(ethers.parseUnits(available, 6))) {
+        toast({ title: "Error", description: "Borrow amount exceeds available balance", variant: "destructive" })
+        return
+      }
+      const tx = await contract.borrowApply(parsedAmount, { gasLimit: 300000 })
+      toast({ title: "Borrow Request Sent", description: `Tx Hash: ${tx.hash}` })
       await tx.wait()
-      toast({title: "Borrow Confirmed", description: `Borrowed: ${amount} USDC`})
-    } catch (error: any) {
+      toast({ title: "Borrow Confirmed", description: `Borrowed: ${amount} USDC` })
+    } catch (error) {
       console.error("Borrow error: ", error)
-      toast({title: "Borrow Failed", description: error.reason || error.message || "An unexpected error occurred", variant: "destructive"})
+      toast({ title: "Borrow Failed", description: error.reason || error.message || "An unexpected error occurred", variant: "destructive" })
     }
   }
 
-
-//  const selectedTokenData = borrowTokens.find((t) => t.symbol === selectedToken)
   const healthFactor = amount ? (2.45 - Number.parseFloat(amount) / 50000).toFixed(2) : "2.45"
   const liquidationPrice = amount ? (1800 - Number.parseFloat(amount) / 10).toFixed(0) : "1800"
 
@@ -126,7 +136,6 @@ export function BorrowInterface() {
             </SelectContent>
           </Select>
         </div>
-
         <div className="space-y-2">
           <Label className="text-gray-300">Amount</Label>
           <div className="relative">
@@ -149,7 +158,6 @@ export function BorrowInterface() {
           </div>
           <p className="text-sm text-gray-400">Available: {available} USDC</p>
         </div>
-
         {selectedToken && amount && (
           <div className="space-y-4">
             <div className="p-4 bg-slate-700/50 rounded-lg space-y-2">
@@ -167,7 +175,6 @@ export function BorrowInterface() {
                 </span>
               </div>
             </div>
-
             <div className="p-4 bg-slate-700/50 rounded-lg space-y-2">
               <h4 className="text-white font-medium">Loan Terms</h4>
               <div className="flex justify-between text-sm">
@@ -179,7 +186,6 @@ export function BorrowInterface() {
                 <span className="text-white">${liquidationPrice} ETH</span>
               </div>
             </div>
-
             {Number.parseFloat(healthFactor) < 1.5 && (
               <Alert className="border-yellow-500 bg-yellow-500/10">
                 <AlertTriangle className="h-4 w-4 text-yellow-500" />
@@ -190,11 +196,10 @@ export function BorrowInterface() {
             )}
           </div>
         )}
-
         <Button
           onClick={handleBorrow}
           className="w-full bg-orange-600 hover:bg-orange-700"
-          disabled={!selectedToken || !amount || !isCorrectChain}
+          disabled={!selectedToken || !amount || !isCorrectChain || !isInitialized}
         >
           Borrow USDC
         </Button>

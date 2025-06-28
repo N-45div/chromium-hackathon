@@ -140,11 +140,8 @@ export function DepositForm() {
 
   return (
     <Card className="bg-slate-800/50 backdrop-blur-sm border-slate-700">
-      <CardHeader>
-        <CardTitle className="text-white">Simple Deposit</CardTitle>
-      </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-2">
+        <div className="space-y-2z">
           <Label htmlFor="token" className="text-gray-300">Collateral Token</Label>
           <Select value={selectedToken} onValueChange={setSelectedToken}>
             <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
