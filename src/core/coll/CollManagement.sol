@@ -109,6 +109,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable, AccessControl
     error PriceFeedNotSet(address token);
     error HealthFactorNotBelowThreshold();
     error NoDebtToRepay();
+    error InsufficientFee();
 
     function setLiquidationThreshold(uint256 threshold) external onlyOwner {
         require(threshold > 100, "Threshold must be > 100");
@@ -144,7 +145,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable, AccessControl
      * @param _amount The amount to deposit.
      * @param _recipient The recipient address on the target chain.
      */
-    function depositCollateral(address _collateralToken, uint256 _amount, address _recipient) external {
+    function depositCollateral(address _collateralToken, uint256 _amount, address _recipient) external payable {
         if (_collateralToken != COLL_WETH) revert UnsupportedCollateralToken(_collateralToken);
         if (_amount == 0) revert ZeroAmount();
         if (targetChainParams[_collateralToken].borrowManagementContract == address(0)) revert TargetChainNotSet();
@@ -176,7 +177,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable, AccessControl
             merkleRoot: bytes32(0)
         });
 
-        _sendMessage(_collateralToken, abi.encode(crossChainBorrowInfo), 200_000);
+        _sendMessagePayable(_collateralToken, abi.encode(crossChainBorrowInfo), 200_000);
     }
 
     /**
@@ -220,7 +221,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable, AccessControl
             merkleRoot: privacyPool.getRoot()
         });
 
-        _sendMessage(COLL_WETH, abi.encode(crossChainBorrowInfo), 200_000);
+        _sendMessageFromContract(COLL_WETH, abi.encode(crossChainBorrowInfo), 200_000);
     }
 
     function depositPrivateCollateral(
@@ -357,7 +358,7 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable, AccessControl
             });
         }
 
-        _sendMessage(ccbi.collateralToken, abi.encode(responseCcbi), 100_000);
+        _sendMessageFromContract(ccbi.collateralToken, abi.encode(responseCcbi), 100_000);
     }
 
     /**
@@ -403,37 +404,53 @@ contract CollManagement is ICollManagement, CCIPReceiver, Ownable, AccessControl
             });
         }
 
-        _sendMessage(ccbi.collateralToken, abi.encode(responseCcbi), 100_000);
+        _sendMessageFromContract(ccbi.collateralToken, abi.encode(responseCcbi), 100_000);
     }
 
     /**
      * @notice Sends a CCIP message to the target chain.
      */
-    function _sendMessage(address _collateralToken, bytes memory data, uint256 gasForDestCall) internal {
+    function _sendMessageFromContract(address _collateralToken, bytes memory _data, uint32 _gasLimit) internal {
         TargetChainParams memory params = targetChainParams[_collateralToken];
+        IRouterClient router = IRouterClient(getRouter());
 
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(params.borrowManagementContract),
-            data: data,
+            data: _data,
             tokenAmounts: new Client.EVMTokenAmount[](0),
-            extraArgs: _getExtraArgs(gasForDestCall),
+            extraArgs: Client._argsToBytes(
+                Client.GenericExtraArgsV2({gasLimit: _gasLimit, allowOutOfOrderExecution: false})
+            ),
             feeToken: linkToken
         });
 
-        IRouterClient router = IRouterClient(getRouter());
         uint256 fee = router.getFee(params.chainSelector, message);
         if (fee > OZERC20(linkToken).balanceOf(address(this))) {
             revert NotEnoughLink(fee, OZERC20(linkToken).balanceOf(address(this)));
         }
 
         OZERC20(linkToken).approve(address(router), fee);
-
         router.ccipSend(params.chainSelector, message);
     }
 
-    function _getExtraArgs(uint256 gasForDestCall) internal pure returns (bytes memory) {
-        return
-            Client._argsToBytes(Client.GenericExtraArgsV2({gasLimit: gasForDestCall, allowOutOfOrderExecution: true}));
+    function _sendMessagePayable(address _collateralToken, bytes memory _data, uint32 _gasLimit) internal {
+        IRouterClient router = IRouterClient(this.getRouter());
+
+        Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
+            receiver: abi.encode(targetChainParams[_collateralToken].borrowManagementContract),
+            data: _data,
+            tokenAmounts: new Client.EVMTokenAmount[](0),
+            extraArgs: Client._argsToBytes(
+                Client.GenericExtraArgsV2({gasLimit: _gasLimit, allowOutOfOrderExecution: false})
+            ),
+            feeToken: address(0) // Use native currency for fee
+        });
+
+        uint256 fee = router.getFee(targetChainParams[_collateralToken].chainSelector, message);
+        if (msg.value < fee) revert InsufficientFee();
+
+        // Send the message
+        router.ccipSend{value: fee}(targetChainParams[_collateralToken].chainSelector, message);
     }
 
     /**
