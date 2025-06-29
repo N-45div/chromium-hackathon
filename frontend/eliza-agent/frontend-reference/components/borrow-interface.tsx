@@ -15,12 +15,8 @@ import CollManagementABI from "../../abi/CollManagement.json"
 
 const BORROW_MANAGEMENT_ADDRESS = "0x8828210BCdC39fB6A6cA01861970825F317F58d6"
 const BORROW_USDC = "0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1"
-const COLL_MANAGEMENT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xd4aa953485eF4f1A916e42b9350Ab510f0920465"
+const COLL_MANAGEMENT_ADDRESS = "0xd4aa953485eF4f1A916e42b9350Ab510f0920465"
 const WETH_ADDRESS = "0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764"
-const FUJI_RPC_URL = "https://api.avax-test.network/ext/bc/C/rpc"
-const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com"
-const LIQUIDATION_AGENT_API_URL = "http://localhost:3001"
-const LIQUIDATION_BORROWERS = process.env.NEXT_PUBLIC_BORROWERS || "0x76ACa6a6B825683408d28B71ed11d5463fA1496F"
 const CHAIN_IDS = { FUJI: 43113, SEPOLIA: 11155111 }
 
 export function BorrowInterface() {
@@ -30,7 +26,6 @@ export function BorrowInterface() {
   const [isCorrectChain, setIsCorrectChain] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
   const [liquidationData, setLiquidationData] = useState(null)
-  const [healthFactor, setHealthFactor] = useState("2.45")
   const { toast } = useToast()
 
   const fetchAvailable = useCallback(async () => {
@@ -52,7 +47,8 @@ export function BorrowInterface() {
         setIsCorrectChain(true)
       }
 
-      const fujiProvider = new ethers.JsonRpcProvider(FUJI_RPC_URL)
+      // Check borrow initialization on Fuji
+      const fujiProvider = new ethers.JsonRpcProvider("https://api.avax-test.network/ext/bc/C/rpc")
       const borrowContract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, fujiProvider)
       let balanceInfo
       try {
@@ -84,7 +80,7 @@ export function BorrowInterface() {
         toast({ title: "Error", description: "Failed to fetch borrow balance", variant: "destructive" })
       }
 
-      const sepoliaProvider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+      const sepoliaProvider = new ethers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com")
       const collContract = new ethers.Contract(COLL_MANAGEMENT_ADDRESS, CollManagementABI.abi, sepoliaProvider)
       const collateralInfo = await collContract.userCollateral(userAddress, WETH_ADDRESS)
       const priceFeedAddress = await collContract.priceFeeds(WETH_ADDRESS)
@@ -113,16 +109,22 @@ export function BorrowInterface() {
     }
   }, [])
 
+  useEffect(() => {
+    fetchAvailable()
+  }, [fetchAvailable])
+
   const fetchLiquidationData = useCallback(async () => {
     try {
-      const response = await fetch(`${LIQUIDATION_AGENT_API_URL}/check-positions`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_LIQUIDATION_AGENT_API_URL}/check-positions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          RPC_URL: SEPOLIA_RPC_URL,
-          CONTRACT_ADDRESS: COLL_MANAGEMENT_ADDRESS,
-          PRIVATE_KEY: process.env.NEXT_PUBLIC_PRIVATE_KEY,
-          BORROWERS: LIQUIDATION_BORROWERS.split(","),
+          RPC_URL: "https://api.avax-test.network/ext/bc/C/rpc", // Replace with actual RPC URL if needed
+          CONTRACT_ADDRESS: BORROW_MANAGEMENT_ADDRESS,
+          PRIVATE_KEY: "0x09115d6c2d2546f950030c65e52607be0f6d96dc21aa377512422e3ba02fcd72", // Hardcoded for testing, INSECURE for production
+          BORROWERS: ["0x890720e2843DFb80Bb3596534A2ab2cc9516d0eA"], // Hardcoded for testing
         }),
       })
       if (!response.ok) {
@@ -130,42 +132,16 @@ export function BorrowInterface() {
       }
       const data = await response.json()
       setLiquidationData(data)
-      toast({ title: "Liquidation Data Fetched", description: "Successfully loaded liquidation data via ElizaOS." })
+      toast({ title: "Liquidation Data Fetched", description: "Successfully loaded liquidation data." })
     } catch (error) {
       console.error("Error fetching liquidation data:", error)
       toast({ title: "Error", description: "Failed to fetch liquidation data.", variant: "destructive" })
     }
   }, [])
 
-  const fetchHealthFactor = useCallback(async () => {
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const signer = await provider.getSigner()
-      const userAddress = await signer.getAddress()
-      const response = await fetch(`${LIQUIDATION_AGENT_API_URL}/health-factor?user=${userAddress}`)
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      const data = await response.json()
-      console.log("Health factor response:", data)
-      if (data.healthFactor === "115792089237316195423570985008687907853269984665640564039457584007913129639935") {
-        setHealthFactor("N/A")
-        toast({ title: "Warning", description: "No active borrow position.", variant: "default" })
-      } else {
-        setHealthFactor(data.healthFactor.toFixed(2))
-        toast({ title: "Health Factor Fetched", description: `Health Factor: ${data.healthFactor.toFixed(2)}` })
-      }
-    } catch (error) {
-      console.error("Error fetching health factor:", error)
-      toast({ title: "Error", description: "Failed to fetch health factor.", variant: "destructive" })
-    }
-  }, [])
-
   useEffect(() => {
-    fetchAvailable()
     fetchLiquidationData()
-    fetchHealthFactor()
-  }, [fetchAvailable, fetchLiquidationData, fetchHealthFactor])
+  }, [fetchLiquidationData])
 
   const handleBorrow = async () => {
     if (!selectedToken || !amount) {
@@ -185,6 +161,9 @@ export function BorrowInterface() {
         amount,
         available,
       })
+      // if (Number(network.chainId) !== CHAIN_IDS.FUJI) {
+      //   toast({ title: "Warning", description: `Please switch to Fuji (Chain ID: ${CHAIN_IDS.FUJI}) for borrowing`, variant: "default" })
+      // }
       const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, signer)
       const parsedAmount = ethers.parseUnits(amount, 6)
       if (Number(parsedAmount) > Number(ethers.parseUnits(available, 6))) {
@@ -214,7 +193,7 @@ export function BorrowInterface() {
     }
   }
 
-  const newHealthFactor = amount ? (Number(healthFactor) - Number.parseFloat(amount) / 50000).toFixed(2) : healthFactor
+  const healthFactor = amount ? (2.45 - Number.parseFloat(amount) / 50000).toFixed(2) : "2.45"
   const liquidationPrice = amount ? (1800 - Number.parseFloat(amount) / 10).toFixed(0) : "1800"
 
   return (
@@ -230,6 +209,18 @@ export function BorrowInterface() {
               Borrowing not initialized. Attempting to borrow may fail.
             </AlertDescription>
           </Alert>
+        )}
+        {liquidationData && (
+          <Card className="bg-slate-800/50 backdrop-blur-sm border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white">Liquidation Data</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-gray-300">
+                <pre className="text-sm text-gray-400 overflow-auto">{JSON.stringify(liquidationData, null, 2)}</pre>
+              </p>
+            </CardContent>
+          </Card>
         )}
         <div className="space-y-2">
           <Label className="text-gray-300">Borrow Token</Label>
@@ -275,14 +266,14 @@ export function BorrowInterface() {
               <h4 className="text-white font-medium">Health Factor Impact</h4>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">Current Health Factor</span>
-                <span className="text-green-400">{healthFactor}</span>
+                <span className="text-green-400">2.45</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">New Health Factor</span>
                 <span
-                  className={`${Number.parseFloat(newHealthFactor) > 1.5 ? "text-green-400" : Number.parseFloat(newHealthFactor) > 1.2 ? "text-yellow-400" : "text-red-400"}`}
+                  className={`${Number.parseFloat(healthFactor) > 1.5 ? "text-green-400" : Number.parseFloat(healthFactor) > 1.2 ? "text-yellow-400" : "text-red-400"}`}
                 >
-                  {newHealthFactor}
+                  {healthFactor}
                 </span>
               </div>
             </div>
@@ -297,7 +288,7 @@ export function BorrowInterface() {
                 <span className="text-white">${liquidationPrice} ETH</span>
               </div>
             </div>
-            {Number.parseFloat(newHealthFactor) < 1.5 && (
+            {Number.parseFloat(healthFactor) < 1.5 && (
               <Alert className="border-yellow-500 bg-yellow-500/10">
                 <AlertTriangle className="h-4 w-4 text-yellow-500" />
                 <AlertDescription className="text-yellow-200">
