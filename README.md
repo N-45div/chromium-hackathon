@@ -1,143 +1,200 @@
 # StratoLend Network
 
-Our capabilities align seamlessly with multi-chain infrastructure, enabling us to deliver advanced, institutional-grade strategies while also offering flexible services tailored to retail participants.
+## 🌟 Overview
 
-## Protocol introduction
+StratoLend Network is an institutional-grade cross-chain lending protocol that enables users to deposit collateral on one blockchain and borrow assets on another. Built for the Chainlink Hackathon, our solution addresses the $50B+ fragmented liquidity problem in DeFi while providing professional-grade infrastructure for institutional capital management.
 
-### Background
+## 🎯 Problem Statement
 
-Lending protocols represent a core category within decentralized finance (DeFi), enabling users to significantly enhance their capital efficiency. Currently, leading protocols such as Compound and Aave primarily implement lending and borrowing functionalities on a single blockchain. However, market demand increasingly points towards solutions that allow users to deposit tokens on a source chain and borrow tokens on a different target chain.
+### **Problem 1: Fragmented Liquidity Across Chains**
+The crypto industry suffers from "fragmented liquidity" - one of the largest problems across web3. Even with Aave Portal, the absence of robust cross-chain connectivity constrains liquidity as DeFi protocols are critically reliant on liquidity.
 
-Although several cross-chain lending protocols exist, substantial challenges persist. Pike Finance, for instance, suffered an exploit due to vulnerabilities in its smart contract bridge interactions. Kava Lend, while operational, continues to see relatively low transaction volumes. Radiant Capital, meanwhile, predominantly experiences intra-chain lending activities, with cross-chain borrowing metrics remaining comparatively limited.
+### **Problem 2: Institutional DeFi Adoption Barriers**
+The limited growth of institutional DeFi is often explained by the lack of KYC and AML capabilities, with several blue-chip DeFi protocols attempting to enable these without significant success. Retail apps are problematic for institutions as they are not designed to handle institutional volumes.
 
-Integrating lending functionalities with cross-chain bridging introduces heightened security concerns, as bridges frequently become points of vulnerability. Nevertheless, there is undeniable demand from financial institutions and large capital holders aiming to efficiently manage assets across multiple blockchains. Increased reliance on bridges may amplify security risks, yet the flexibility they provide is essential for maximizing capital efficiency across diverse blockchain ecosystems.
+### **Problem 3: Security Vulnerabilities in Cross-Chain Operations**
+Common security issues in DeFi include rug pulls and impermanent loss, with smart contract exploits leading to liquidity crises and regulatory breaches, compounded by cascading liquidations during market downturns.
 
-Recognizing these challenges and opportunities, our protocol is specifically designed to support financial institutions and significant capital entities in enhancing their asset management capabilities. By leveraging advanced security mechanisms and sophisticated management tools, we ensure robust protection alongside optimized capital utilization. Additionally, our platform provides flexibility tailored specifically for retail users.
+### **Problem 4: Lack of Professional Capital Management Tools**
+The continued rapid growth in digital asset operations emphasizes the importance of secure, scalable solutions that empower institutions to confidently navigate DeFi space. Current platforms lack professional-grade portfolio management.
 
-### Features
+## 💡 Our Solution
 
-1. Cross-Chain Lending and Borrowing (Priority 1)
+**StratoLend's Core Innovation**: Native cross-chain lending infrastructure that doesn't fragment liquidity across different protocols, purpose-built for institutional-scale operations with enhanced security, API integration, and professional tools.
 
-   1. Users can deposit collateral on the source chain and select borrowing tokens on the target chain.
-   2. Chains supported: Ethereum, BNB, Avalanche.
-      Collateral tokens supported: ETH, BNB.
-      Borrowing token supported: USDC.
+## ✨ Key Features
 
-2. Collateral Management (Priority 1)
+### 🔗 Cross-Chain Lending and Borrowing
+- Deposit collateral on source chain, borrow on target chain
+- **Supported Chains**: Ethereum, BNB Chain, Avalanche
+- **Collateral Tokens**: ETH, BNB
+- **Borrowing Token**: USDC
 
-   1. Efficient management of user collateral and borrowed capital across different chains.
-   2. Consistent maintenance of health factors during deposits and redemptions.
-   3. Robust liquidation management system.
+### 🛡️ Enhanced Security Management
+- Multi-signature approvals for large deposits
+- Insurance partnerships for additional protection
+- Whitelist controls for institutional security
+- AI-driven monitoring for proactive threat detection
 
-3. Security Management
+### 🤖 AI-Powered Capital Management
+- AI-driven yield optimization algorithms
+- Automated liquidation protection using ElizaOS agents
+- Real-time portfolio rebalancing
+- Multi-chain position tracking and analytics
 
-   1. Multi-signature approvals for large deposits.
-   2. Partnerships with insurance providers.
-   3. Whitelist controls for security.
-   4. AI-driven monitoring for proactive security.
+### 🔒 Privacy Features
+- Private borrowing activities across chains
+- Zero-knowledge proof integration (roadmap)
 
-4. Optimized Capital Management
+### 🏢 Institutional Infrastructure
+- RESTful APIs for seamless integration
+- Webhook notifications for real-time alerts
+- Professional risk management endpoints
+- Hedge fund-targeted functionalities
 
-   0. AI-driven yield optimization and automated liquidation protection (Priority 1).
+## 🔧 Chainlink Integration
 
-   1. Dashboard displaying comprehensive lending and borrowing APYs across different supported chains
-      to help users find the potential opportunities or risks.
+Our protocol leverages multiple Chainlink services for robust cross-chain operations:
 
-   2. Build automated yield scanner showing real opportunities
-      (TO DO)
+- **[Chainlink CCIP](https://docs.chain.link/ccip/api-reference/evm/v1.6.0/)**: Secure cross-chain messaging between collateral and borrowing chains
+- **[Chainlink Price Feeds](https://docs.chain.link/docs/using-chainlink-reference-contracts)**: Real-time asset pricing for accurate collateral valuation
 
-   3. Hedge fund-targeted functionalities (TODO, more desgin consideration)
-      RESTful APIs for seamless integration
-      Webhook notifications for real-time alerts
-      Risk management endpoints
+## 🏗️ Architecture
 
-   4. Professional capital management tools
-      Portfolio rebalancing algorithms
-      Automated liquidation protection
-      Multi-chain position tracking and analytics
+### Smart Contracts
 
-5. Privacy (Priority 1)
-   User borrowing activities remain private across chains.
-   TODO should check these blow points throughly
+#### CollManagement Contract (Sepolia)
+Manages user collateral and initiates cross-chain borrowing requests.
+
+**Main Functions:**
+- `depositCollateral(amount)`: Deposit collateral tokens
+- `userCollateral(user)`: Query user's collateral balance
+
+#### BorrowManagement Contract (Avalanche)
+**Contract Address**: [0x8828210BCdC39fB6A6cA01861970825F317F58d6](https://testnet.snowtrace.io/address/0x8828210BCdC39fB6A6cA01861970825F317F58d6)
+
+Executes borrowing on target chain and receives cross-chain loan requests.
+
+**Main Functions:**
+- `borrowApply(borrowAmount)`: Apply for loan with specified amount
+- `ccipReceive(message)`: Receive cross-chain borrow requests
+- `userBorrowed(user)`: Query user's borrowed amount
+
+### Cross-Chain Data Structure
+
+```solidity
+struct BorrowInfo {
+    address user;                // User address
+    address token;               // Collateral/loan token
+    uint256 amount;              // Amount
+    uint64 sourceChainSelector;  // Source chain ID
+    uint64 targetChainSelector;  // Target chain ID
+}
+```
+
+## 🖥️ Frontend Integration
+
+The frontend enables users to deposit WETH collateral and borrow USDC via three main components:
+
+### Components
+
+#### DepositForm (`deposit-form.tsx`)
+- **Purpose**: Deposits WETH collateral on Sepolia via `CollManagement.sol`
+- **Features**: WETH selection, amount input, Fuji recipient specification, transaction preview
+
+#### BorrowInterface (`borrow-interface.tsx`)
+- **Purpose**: Borrows USDC via `borrowApply` in `BorrowManagement.sol` implemented on Avalanche
+- **Contract**: [BorrowManagement](https://testnet.snowtrace.io/address/0x8828210BCdC39fB6A6cA01861970825F317F58d6)
+- **Features**: USDC borrowing, health factor display, liquidation price calculation
+
+#### AvailableBorrowing (`available-borrowing.tsx`)
+- **Purpose**: Displays borrow balance and collateral details
+- **Features**: Real-time balance queries, collateral data fetching, available USDC calculation
+
+### Technical Stack
+- **Frontend**: React, TypeScript, ethers.js
+- **Chains**: Sepolia (Collateral), Avalanche Fuji (Borrowing)
+- **Tokens**: WETH (`0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`), USDC (`0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1`)
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js (v16+)
+- MetaMask or compatible Web3 wallet
+- Testnet ETH for Sepolia and AVAX for Fuji
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-repo/stratolend-network
+   cd stratolend-network
    ```
-   How would zkp be used for privacy? What is the value-prop for ensuring certain things are private?
+
+2. **Install dependencies**
+   ```bash
+   npm install
    ```
 
-### Stack/Architecture
+3. **Environment setup**
+   ```bash
+   cp .env.example .env
+   # Configure your environment variables
+   ```
 
-![draft_Architecture](img/Architecture_draft.png)
+4. **Run the frontend**
+   ```bash
+   npm run dev
+   ```
 
-## Chainlink Services
+### Usage
 
-notices:
+1. **Connect Wallet**: Connect your MetaMask to Sepolia testnet
+2. **Deposit Collateral**: Use DepositForm to deposit WETH as collateral
+3. **Switch to Avalanche**: Switch to Avalanche Fuji testnet
+4. **Borrow USDC**: Use BorrowInterface to borrow USDC against your collateral
+5. **Monitor Position**: View your borrowing status and health factor
 
-1. below should link the related code which applied chainlink services
-2. state changed proof in different chains
+## 🔐 Security Features
 
-- [Chainlink Price Feeds](https://docs.chain.link/docs/using-chainlink-reference-contracts)
-- [Chainlink VRF V2](https://docs.chain.link/docs/chainlink-vrf)
-- [Chainlink Automation](https://docs.chain.link/chainlink-automation/introduction)
-- [Chainlink CCIP](https://docs.chain.link/ccip/api-reference/evm/v1.6.0/)
+- **Multi-signature controls** for large operations
+- **AI-powered monitoring** using ElizaOS agents
+- **Insurance partnerships** for additional protection
+- **Robust liquidation management** system
+- **Cross-chain security** through enhanced CCIP integration
 
-## Core Contract Interfaces & ABI
+## 🛣️ Roadmap
 
-### CollManagement Contract
+### Phase 1 (Current)
+- ✅ Cross-chain lending MVP
+- ✅ Chainlink integration
+- ✅ Basic frontend interface
+- ✅ AI liquidation protection
 
-- **Purpose**: Manages user collateral and initiates cross-chain borrowing requests
+### Phase 2 (Q2 2025)
+- 🔄 Multi-chain expansion (Polygon, Arbitrum)
+- 🔄 Advanced yield optimization
+- 🔄 Professional API suite
+- 🔄 Insurance integration
 
-#### Main Functions
+### Phase 3 (Q3 2025)
+- 🔄 Zero-knowledge privacy features
+- 🔄 Institutional KYC/AML
+- 🔄 Advanced risk management
+- 🔄 Governance token launch
 
-| Function Name     | Description                   | Parameters                          | Return Value |
-| ----------------- | ----------------------------- | ----------------------------------- | ------------ |
-| depositCollateral | User deposits collateral      | amount (uint256): amount to deposit | None         |
-| userCollateral    | Query user collateral balance | user (address): user address        | uint256      |
+## 📊 Market Impact
 
-#### Events
+- **Target Market**: $50B+ fragmented DeFi liquidity
+- **Primary Users**: Institutional investors, hedge funds, high-net-worth individuals
+- **Competitive Advantage**: First institutional-grade cross-chain lending solution
 
-| Event Name          | Parameters Description                                   |
-| ------------------- | -------------------------------------------------------- |
-| CollateralDeposited | user (address): user address<br>amount (uint256): amount |
+## 📜 License
 
----
-
-### BorrowManagement Contract
-
-- **Purpose**: Executes borrowing on target chain and receives cross-chain loan requests
-
-#### Main Functions
-
-| Function Name | Description                      | Parameters                           | Return Value |
-| ------------- | -------------------------------- | ------------------------------------ | ------------ |
-| ccipReceive   | Receives cross-chain borrow call | message (bytes): cross-chain message | None         |
-| userBorrowed  | Query user's borrowed amount     | user (address): user address         | uint256      |
-
-#### Events
-
-| Event Name     | Parameters Description                                   |
-| -------------- | -------------------------------------------------------- |
-| BorrowApproved | user (address): user address<br>amount (uint256): amount |
-
----
-
-### Cross-chain Struct
-
-#### BorrowInfo
-
-| Field               | Type    | Description                                  |
-| ------------------- | ------- | -------------------------------------------- |
-| user                | address | User address                                 |
-| token               | address | Collateral/loan token (supports multi-token) |
-| amount              | uint256 | Amount                                       |
-| sourceChainSelector | uint64  | Source chain ID                              |
-| targetChainSelector | uint64  | Target chain ID                              |
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-### ABI Files
+**Built for the Chainlink Hackathon 2025**
 
-- [CollManagement.abi.json](./abi/CollManagement.abi.json)
-- [BorrowManagement.abi.json](./abi/BorrowManagement.abi.json)
-
-**For more detailed usage, please refer to the source code or contact the backend developer.**
-
-## Sponser Services
+*Empowering institutional DeFi through secure, cross-chain infrastructure.*
