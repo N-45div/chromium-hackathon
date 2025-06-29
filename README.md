@@ -142,22 +142,17 @@ The frontend enables users to deposit WETH collateral and borrow USDC via three 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-repo/stratolend-network
-   cd stratolend-network
+   git clone https://github.com/N-45div/chromium-hackathon.git
+   cd chromium-hackathon
    ```
 
 2. **Install dependencies**
    ```bash
+   cd frontend
    npm install
    ```
 
-3. **Environment setup**
-   ```bash
-   cp .env.example .env
-   # Configure your environment variables
-   ```
-
-4. **Run the frontend**
+3. **Run the frontend**
    ```bash
    npm run dev
    ```
