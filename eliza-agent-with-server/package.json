@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "tsc",
+    "start:server": "node dist/src/server.js",
     "dev": "tsx --env-file=.env src/index.ts",
     "functions:check-positions": "tsx --env-file=.env src/functions/check-positions.ts",
     "deploy:trigger": "tsx scripts/deploy-trigger.ts --network sepolia",
@@ -18,12 +19,16 @@
   "dependencies": {
     "@elizaos/core": "^1.0.15",
     "@elizaos/plugin-evm": "^1.0.12",
+    "cors": "^2.8.5",
     "ethers": "^6.14.4",
+    "express": "^5.1.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@chainlink/contracts": "^1.4.0",
     "@nomicfoundation/hardhat-toolbox": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
     "@types/uuid": "^10.0.0",
     "dotenv": "^17.0.0",
     "hardhat": "^2.25.0",
