@@ -46,18 +46,30 @@ The continued rapid growth in digital asset operations emphasizes the importance
 - Private borrowing activities across chains
 - Zero-knowledge proof integration (roadmap)
 
-### 🏢 Institutional Infrastructure
-- RESTful APIs for seamless integration
-- Webhook notifications for real-time alerts
-- Professional risk management endpoints
-- Hedge fund-targeted functionalities
-
 ## 🔧 Chainlink Integration
 
 Our protocol leverages multiple Chainlink services for robust cross-chain operations:
 
 - **[Chainlink CCIP](https://docs.chain.link/ccip/api-reference/evm/v1.6.0/)**: Secure cross-chain messaging between collateral and borrowing chains
 - **[Chainlink Price Feeds](https://docs.chain.link/docs/using-chainlink-reference-contracts)**: Real-time asset pricing for accurate collateral valuation
+
+**Chainlink CCIP** : 
+ 
+1. https://github.com/N-45div/chromium-hackathon/blob/sektorialMOD/src/core/coll/CollManagement.sol#L536
+
+2. https://github.com/N-45div/chromium-hackathon/blob/sektorialMOD/src/core/borrow/BorrowManagement.sol#L223
+
+3. https://github.com/N-45div/chromium-hackathon/blob/sektorialMOD/src/core/borrow/BorrowManagement.sol#L446
+
+4. https://github.com/N-45div/chromium-hackathon/blob/sektorialMOD/src/core/coll/CollManagement.sol#L263
+
+5. https://github.com/N-45div/chromium-hackathon/blob/sektorialMOD/src/core/coll/CollManagement.sol#L412
+
+**Chainlink Price Feeds** : 
+
+1. https://github.com/N-45div/chromium-hackathon/blob/sektorialMOD/src/core/coll/CollManagement.sol#L540
+
+2. https://github.com/N-45div/chromium-hackathon/blob/sektorialMOD/src/chainlink/PriceFeedConsumer.sol
 
 ## 🏗️ Architecture
 
