@@ -71,6 +71,10 @@ Our protocol leverages multiple Chainlink services for robust cross-chain operat
 
 2. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/chainlink/PriceFeedConsumer.sol
 
+**Solana CCIP Integration** : 
+
+1. https://github.com/N-45div/chromium-hackathon/blob/solana/ccip-scripts/src/api/transfer.ts
+
 ## 🏗️ Architecture
 
 ### Smart Contracts
