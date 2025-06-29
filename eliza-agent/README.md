@@ -14,7 +14,7 @@ This guide will walk you through setting up and running the `eliza-agent` locall
 First, clone the project repository to your local machine.
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/N-45div/chromium-hackathon.git
 cd eliza-agent
 ```
 
@@ -58,12 +58,3 @@ npm run dev
 ```
 
 If successful, you should see output in your terminal indicating that the agent is running and has started monitoring the specified borrower addresses.
-
----
-
-**Step 5: Frontend Integration**
-
-The agent exposes an API that the frontend can use to get the health factor for a given user.
-
-*   **API Endpoint:** The agent will start a local server. The main endpoint to fetch data will likely be `http://localhost:3000/health-factor?user=<borrower_address>`. (The exact port and endpoint can be confirmed by inspecting `src/index.ts`).
-*   **Frontend Logic:** Your frontend developers will need to make a `GET` request to this endpoint, passing the borrower's address as a query parameter. The frontend can then display the returned health factor to the user.
