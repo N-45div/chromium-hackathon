@@ -78,6 +78,9 @@ Our protocol leverages multiple Chainlink services for robust cross-chain operat
 #### CollManagement Contract (Sepolia)
 Manages user collateral and initiates cross-chain borrowing requests.
 
+#### CollManagement Contract (Sepolia)
+**Contract Address**: [0xd4aa953485eF4f1A916e42b9350Ab510f0920465](https://sepolia.etherscan.io/address/0xd4aa953485eF4f1A916e42b9350Ab510f0920465)
+
 **Main Functions:**
 - `depositCollateral(amount)`: Deposit collateral tokens
 - `userCollateral(user)`: Query user's collateral balance
