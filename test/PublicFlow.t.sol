@@ -106,6 +106,7 @@ contract PublicFlowTest is Test {
         );
 
         weth.mint(depositor, 100 ether);
+        vm.deal(depositor, 10 ether);
         link.mint(address(source_collManagement), 100 ether);
         usdc.mint(address(target_borrowManagement), 1_000_000 * 1e6);
 
@@ -121,7 +122,7 @@ contract PublicFlowTest is Test {
 
         // === 1. DEPOSIT COLLATERAL (Source) & INITIATE BORROW (CCIP to Target) ===
         vm.startPrank(depositor);
-        source_collManagement.depositCollateral(address(weth), depositAmount, recipient);
+        source_collManagement.depositCollateral{value: 1 ether}(address(weth), depositAmount, recipient);
         vm.stopPrank();
 
         // === 2. SIMULATE CCIP: Source -> Target (Borrow Initial) ===
