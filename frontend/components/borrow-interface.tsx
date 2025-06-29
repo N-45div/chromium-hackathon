@@ -15,6 +15,8 @@ import CollManagementABI from "../../abi/CollManagement.json"
 
 const BORROW_MANAGEMENT_ADDRESS = "0xae4E4BDdE6Eb2F040aB9d34EA74086b3a8311389"
 const BORROW_USDC = "0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1"
+const COLL_MANAGEMENT_ADDRESS = "0xd4aa953485eF4f1A916e42b9350Ab510f0920465"
+const WETH_ADDRESS = "0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764"
 const CHAIN_IDS = { FUJI: 43113, SEPOLIA: 11155111 }
 
 export function BorrowInterface() {
@@ -26,42 +28,71 @@ export function BorrowInterface() {
   const { toast } = useToast()
 
   const fetchAvailable = useCallback(async () => {
-    if (!window.ethereum) return
+    if (!window.ethereum) {
+      toast({ title: "Error", description: "No wallet detected", variant: "destructive" })
+      return
+    }
     try {
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
       const userAddress = await signer.getAddress()
       const network = await provider.getNetwork()
       const chainId = Number(network.chainId)
+      console.log("Detected Chain ID:", chainId)
 
       if (chainId !== CHAIN_IDS.SEPOLIA) {
-        toast({ title: "Error", description: `Please switch to Sepolia (Chain ID: ${CHAIN_IDS.SEPOLIA}) for collateral data`, variant: "destructive" })
-        return
+        toast({ title: "Warning", description: `Please switch to Sepolia (Chain ID: ${CHAIN_IDS.SEPOLIA}) for collateral data`, variant: "default" })
+      } else {
+        setIsCorrectChain(true)
       }
-      setIsCorrectChain(true)
 
       // Check borrow initialization on Fuji
       const fujiProvider = new ethers.JsonRpcProvider("https://api.avax-test.network/ext/bc/C/rpc")
       const borrowContract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, fujiProvider)
-      const balanceInfo = await borrowContract.availableBorrowTokenBalance(userAddress)
-      if (balanceInfo.status !== 1) { // BorrowStatus.INITIAL
-        toast({ title: "Error", description: "Borrow not initialized. Please deposit collateral on Sepolia first.", variant: "destructive" })
-        return
+      let balanceInfo
+      try {
+        balanceInfo = await borrowContract.availableBorrowTokenBalance(userAddress)
+        console.log("Raw balanceInfo:", balanceInfo)
+        const balanceFields = {
+          collateralToken: balanceInfo[0] || ethers.ZeroAddress,
+          borrowToken: balanceInfo[1] || ethers.ZeroAddress,
+          initiator: balanceInfo[2] || ethers.ZeroAddress,
+          sourceChainId: balanceInfo[3]?.toString() || "0",
+          pendingAmount: balanceInfo[4]?.toString() || "0",
+          borrowedAmount: balanceInfo[5]?.toString() || "0",
+          status: balanceInfo[6]?.toString() || "0",
+          proof: balanceInfo[7] || "0x",
+          originalDepositor: balanceInfo[8] || ethers.ZeroAddress,
+          recipientForZK: balanceInfo[9] || ethers.ZeroAddress,
+          ownChainSelector: balanceInfo[10]?.toString() || "0",
+          updatedAt: balanceInfo[11]?.toString() || "0",
+          merkleRoot: balanceInfo[12] || "0x",
+        }
+        console.log("Balance info:", balanceFields)
+        if (balanceFields.status !== "1") {
+          toast({ title: "Warning", description: "Borrow not initialized. Attempting to borrow may fail.", variant: "default" })
+        } else {
+          setIsInitialized(true)
+        }
+      } catch (borrowError) {
+        console.error("Error fetching borrow balance:", borrowError)
+        toast({ title: "Error", description: "Failed to fetch borrow balance", variant: "destructive" })
       }
-      setIsInitialized(true)
 
       const sepoliaProvider = new ethers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com")
-      const collContract = new ethers.Contract(
-        "0xd4aa953485eF4f1A916e42b9350Ab510f0920465",
-        CollManagementABI.abi,
-        sepoliaProvider
-      )
-      const collateralInfo = await collContract.userCollateral(userAddress, "0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764")
-      const priceFeedAddress = await collContract.getPriceFeed("0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764")
+      const collContract = new ethers.Contract(COLL_MANAGEMENT_ADDRESS, CollManagementABI.abi, sepoliaProvider)
+      const collateralInfo = await collContract.userCollateral(userAddress, WETH_ADDRESS)
+      const priceFeedAddress = await collContract.priceFeeds(WETH_ADDRESS)
+      console.log("Collateral info:", {
+        totalDeposited: collateralInfo.totalDeposited.toString(),
+        totalBorrowed: collateralInfo.totalBorrowed.toString(),
+        priceFeed: priceFeedAddress,
+      })
+
       const wethAmount = ethers.formatUnits(collateralInfo.totalDeposited, 18)
       let wethPriceUSD = 0
       const priceFeed = new ethers.Contract(
-        priceFeedAddress === ethers.ZeroAddress ? "0x694AA1769357215DE4FAC081bf1f309aDC325306" : priceFeedAddress,
+        priceFeedAddress,
         ["function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)", "function decimals() view returns (uint8)"],
         sepoliaProvider
       )
@@ -72,7 +103,7 @@ export function BorrowInterface() {
       const creditLimit = collateralValueUSD / 1.5
       setAvailable(creditLimit.toFixed(6))
     } catch (error) {
-      console.error("Error fetching available borrow: ", error)
+      console.error("Error fetching available borrow:", error)
       toast({ title: "Error", description: "Failed to fetch available borrow amount", variant: "destructive" })
     }
   }, [])
@@ -82,18 +113,25 @@ export function BorrowInterface() {
   }, [fetchAvailable])
 
   const handleBorrow = async () => {
-    if (!selectedToken || !amount || !isCorrectChain || !isInitialized) {
-      toast({ title: "Error", description: "Please select a token, enter an amount, connect to Sepolia for UI, and ensure borrow is initialized", variant: "destructive" })
+    if (!selectedToken || !amount) {
+      toast({ title: "Error", description: "Please select a token and enter an amount", variant: "destructive" })
       return
     }
     try {
       if (!window.ethereum) throw new Error("MetaMask not found")
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
+      const userAddress = await signer.getAddress()
       const network = await provider.getNetwork()
+      console.log("Borrow attempt:", {
+        userAddress,
+        chainId: Number(network.chainId),
+        selectedToken,
+        amount,
+        available,
+      })
       if (Number(network.chainId) !== CHAIN_IDS.FUJI) {
-        toast({ title: "Error", description: `Please switch to Fuji (Chain ID: ${CHAIN_IDS.FUJI}) for borrowing`, variant: "destructive" })
-        return
+        toast({ title: "Warning", description: `Please switch to Fuji (Chain ID: ${CHAIN_IDS.FUJI}) for borrowing`, variant: "default" })
       }
       const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, signer)
       const parsedAmount = ethers.parseUnits(amount, 6)
@@ -101,12 +139,25 @@ export function BorrowInterface() {
         toast({ title: "Error", description: "Borrow amount exceeds available balance", variant: "destructive" })
         return
       }
+      console.log("Sending borrowApply transaction:", { amount: parsedAmount.toString(), gasLimit: 300000 })
       const tx = await contract.borrowApply(parsedAmount, { gasLimit: 300000 })
+      console.log("Transaction sent:", { txHash: tx.hash, from: tx.from, to: tx.to, data: tx.data })
       toast({ title: "Borrow Request Sent", description: `Tx Hash: ${tx.hash}` })
-      await tx.wait()
+      const receipt = await tx.wait()
+      console.log("Transaction receipt:", {
+        status: receipt.status,
+        gasUsed: receipt.gasUsed.toString(),
+        logs: receipt.logs,
+        blockNumber: receipt.blockNumber,
+      })
       toast({ title: "Borrow Confirmed", description: `Borrowed: ${amount} USDC` })
     } catch (error) {
-      console.error("Borrow error: ", error)
+      console.error("Borrow error:", {
+        message: error.message,
+        reason: error.reason,
+        code: error.code,
+        data: error.data,
+      })
       toast({ title: "Borrow Failed", description: error.reason || error.message || "An unexpected error occurred", variant: "destructive" })
     }
   }
@@ -120,6 +171,14 @@ export function BorrowInterface() {
         <CardTitle className="text-white">Borrow Interface</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {!isInitialized && (
+          <Alert className="border-yellow-500 bg-yellow-500/10">
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            <AlertDescription className="text-yellow-200">
+              Borrowing not initialized. Attempting to borrow may fail.
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="space-y-2">
           <Label className="text-gray-300">Borrow Token</Label>
           <Select value={selectedToken} onValueChange={setSelectedToken}>
@@ -199,7 +258,7 @@ export function BorrowInterface() {
         <Button
           onClick={handleBorrow}
           className="w-full bg-orange-600 hover:bg-orange-700"
-          disabled={!selectedToken || !amount || !isCorrectChain || !isInitialized}
+          disabled={!selectedToken || !amount}
         >
           Borrow USDC
         </Button>
