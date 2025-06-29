@@ -13,7 +13,7 @@ import { ethers } from "ethers"
 import BorrowManagementABI from "../../abi/BorrowManagement.json"
 import CollManagementABI from "../../abi/CollManagement.json"
 
-const BORROW_MANAGEMENT_ADDRESS = "0xae4E4BDdE6Eb2F040aB9d34EA74086b3a8311389"
+const BORROW_MANAGEMENT_ADDRESS = "0x8828210BCdC39fB6A6cA01861970825F317F58d6"
 const BORROW_USDC = "0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1"
 const COLL_MANAGEMENT_ADDRESS = "0xd4aa953485eF4f1A916e42b9350Ab510f0920465"
 const WETH_ADDRESS = "0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764"
@@ -130,9 +130,9 @@ export function BorrowInterface() {
         amount,
         available,
       })
-      if (Number(network.chainId) !== CHAIN_IDS.FUJI) {
-        toast({ title: "Warning", description: `Please switch to Fuji (Chain ID: ${CHAIN_IDS.FUJI}) for borrowing`, variant: "default" })
-      }
+      // if (Number(network.chainId) !== CHAIN_IDS.FUJI) {
+      //   toast({ title: "Warning", description: `Please switch to Fuji (Chain ID: ${CHAIN_IDS.FUJI}) for borrowing`, variant: "default" })
+      // }
       const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, signer)
       const parsedAmount = ethers.parseUnits(amount, 6)
       if (Number(parsedAmount) > Number(ethers.parseUnits(available, 6))) {
