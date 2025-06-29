@@ -73,6 +73,8 @@ Our protocol leverages multiple Chainlink services for robust cross-chain operat
 
 **Solana CCIP Integration** : 
 
+**SVM to EVM token transfer (BnM tokens from Solana devnet to Ethereum Sepolia**
+
 1. https://github.com/N-45div/chromium-hackathon/blob/solana/ccip-scripts/src/api/transfer.ts
 
 ## 🏗️ Architecture
