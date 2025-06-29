@@ -1,11 +1,12 @@
-// frontend/app/ccip-transfer/page.tsx
-import CCIPTransferForm from "@/components/ccip-transfer-form";
+import { CCIPTransferForm } from "@/components/ccip-transfer-form"
 
 export default function CCIPTransferPage() {
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold mb-6">CCIP Token Transfer (Solana to EVM)</h1>
-      <CCIPTransferForm />
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-teal-900 p-6">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold text-white mb-8">CCIP Cross-Chain Transfer</h1>
+        <CCIPTransferForm />
+      </div>
     </div>
-  );
+  )
 }

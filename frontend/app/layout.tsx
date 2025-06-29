@@ -3,8 +3,10 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Navigation } from "@/components/navigation"
-import { SolanaProviders } from "@/components/solana-wallet-provider" // Updated import
 import { Toaster } from "@/components/ui/toaster"
+
+import { SolanaProvider } from "@/components/solana-provider";
+import "@solana/wallet-adapter-react-ui/styles.css";
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -23,11 +25,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <SolanaProviders> {/* Updated Provider */}
+        <SolanaProvider>
           <Navigation />
           <main>{children}</main>
           <Toaster />
-        </SolanaProviders>
+        </SolanaProvider>
       </body>
     </html>
   )

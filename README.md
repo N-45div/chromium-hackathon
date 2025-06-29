@@ -1,242 +1,230 @@
-<br/>
-<p align="center">
-<a href="https://chain.link" target="_blank">
-<img src="./solana_logo.png" width="225" alt="Chainlink Solana logo">
-</a>
-</p>
-<br/>
+# StratoLend Network
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/smartcontractkit/solana-starter-kit)
+## 🌟 Overview
 
-# Chainlink Solana Starter Kit
+StratoLend Network is an institutional-grade cross-chain lending protocol that enables users to deposit collateral on one blockchain and borrow assets on another. Built for the Chainlink Hackathon, our solution addresses the $50B+ fragmented liquidity problem in DeFi while providing professional-grade infrastructure for institutional capital management.
 
-The Chainlink Solana Starter Kit is an [Anchor](https://project-serum.github.io/anchor/getting-started/introduction.html) based program and client that shows developers how to use and interact with [Chainlink Price Feeds on Solana](https://docs.chain.link/solana/). The demo is configured to run on the [Devnet cluster](https://docs.solana.com/clusters#devnet), and is comprised of an on-chain program written in Rust, and an off-chain client written in JavaScript. The program takes parameters and account information from the off-chain client, retrieves the latest price data from the specified Chainlink Price Feed on Devnet, then writes the data out to the specified account, which can then be read by the off-chain client.
+## 🎯 Problem Statement
 
-## Environment Variables
+### **Problem 1: Fragmented Liquidity Across Chains**
+The crypto industry suffers from "fragmented liquidity" - one of the largest problems across web3. Even with Aave Portal, the absence of robust cross-chain connectivity constrains liquidity as DeFi protocols are critically reliant on liquidity.
 
-The following environment variables must be set before running the scripts:
+### **Problem 2: Institutional DeFi Adoption Barriers**
+The limited growth of institutional DeFi is often explained by the lack of KYC and AML capabilities, with several blue-chip DeFi protocols attempting to enable these without significant success. Retail apps are problematic for institutions as they are not designed to handle institutional volumes.
 
-| Variable | Description | Required For |
-|----------|-------------|-------------|
-| `EVM_PRIVATE_KEY` | The private key for the EVM account | All EVM chain operations |
-| `EVM_RPC_URL` | RPC URL for Ethereum Sepolia | Operations on Ethereum Sepolia |
-| `AVAX_RPC_URL` | RPC URL for Avalanche Fuji | Operations on Avalanche Fuji |
-| `SOLANA_RPC_URL` | RPC URL for Solana Devnet (defaults to public endpoint if not set) | Operations on Solana Devnet |
+### **Problem 3: Security Vulnerabilities in Cross-Chain Operations**
+Common security issues in DeFi include rug pulls and impermanent loss, with smart contract exploits leading to liquidity crises and regulatory breaches, compounded by cascading liquidations during market downturns.
 
-### Setting up Environment Variables
+### **Problem 4: Lack of Professional Capital Management Tools**
+The continued rapid growth in digital asset operations emphasizes the importance of secure, scalable solutions that empower institutions to confidently navigate DeFi space. Current platforms lack professional-grade portfolio management.
 
-Create a `.env` file in the root directory with the following format:
+## 💡 Our Solution
 
-```
-EVM_PRIVATE_KEY=your_private_key_here
-EVM_RPC_URL=https://your-ethereum-sepolia-rpc-url
-AVAX_RPC_URL=https://your-avalanche-fuji-rpc-url
-SOLANA_RPC_URL=https://your-solana-devnet-rpc-url
-```
+**StratoLend's Core Innovation**: Native cross-chain lending infrastructure that doesn't fragment liquidity across different protocols, purpose-built for institutional-scale operations with enhanced security, API integration, and professional tools.
 
-**Important**: The RPC URLs must be valid and accessible for the scripts to work. If an RPC URL is not provided for a chain, an error will be thrown when attempting to use that chain.
+## ✨ Key Features
 
-## Running the example on Devnet
+### 🔗 Cross-Chain Lending and Borrowing
+- Deposit collateral on source chain, borrow on target chain
+- **Supported Chains**: Ethereum, BNB Chain, Avalanche
+- **Collateral Tokens**: ETH, BNB
+- **Borrowing Token**: USDC
 
-### Requirements
+### 🛡️ Enhanced Security Management
+- Multi-signature approvals for large deposits
+- Insurance partnerships for additional protection
+- Whitelist controls for institutional security
+- AI-driven monitoring for proactive threat detection
 
-- [NodeJS 12](https://nodejs.org/en/download/) or higher
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Solana CLI](https://docs.solanalabs.com/cli/install)
-- [Anchor](https://book.anchor-lang.com/getting_started/installation.html)
-- A C compiler such as the one included in [GCC](https://gcc.gnu.org/install/).
+### 🤖 AI-Powered Capital Management
+- AI-driven yield optimization algorithms
+- Automated liquidation protection using ElizaOS agents
+- Real-time portfolio rebalancing
+- Multi-chain position tracking and analytics
 
-### Building and Deploying the Consumer Program
+### 🔒 Privacy Features
+- Private borrowing activities across chains
+- Zero-knowledge proof integration (roadmap)
 
-First, ensure that you're in the `solana-starter-kit` directory in this repository
+## 🔧 Chainlink Integration
 
-```
-cd ./solana-starter-kit
-```
+Our protocol leverages multiple Chainlink services for robust cross-chain operations:
 
-Next step is to install all of the required dependencies:
+- **[Chainlink CCIP](https://docs.chain.link/ccip/api-reference/evm/v1.6.0/)**: Secure cross-chain messaging between collateral and borrowing chains
+- **[Chainlink Price Feeds](https://docs.chain.link/docs/using-chainlink-reference-contracts)**: Real-time asset pricing for accurate collateral valuation
 
-```
-npm install
-```
+**Chainlink CCIP** : 
+ 
+1. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L536
 
-**Note for [Apple M1](https://en.wikipedia.org/wiki/Apple_M1) chipsets**: You will need to perform an extra step to get the Anchor framework installed manually from source, as the NPM package only support x86_64 chipsets currently, please run the following command to install it manually:
+2. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/borrow/BorrowManagement.sol#L223
 
-```
-cargo install --git https://github.com/coral-xyz/anchor --tag v0.31.0 anchor-cli --locked
-```
+3. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/borrow/BorrowManagement.sol#L446
 
-Next, generate a new wallet:
+4. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L263
 
-```
-solana-keygen new -o id.json
-```
+5. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L412
 
-You should see the public key in the terminal output. Alternatively, you can find the public key with the following CLI command:
+**Chainlink Price Feeds** : 
 
-```
-solana-keygen pubkey id.json
-```
+1. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L540
 
-Next, airdrop 5 SOL tokens into your new account. Be sure to replace both instances of <RECIPIENT_ACCOUNT_ADDRESS> with your wallet's public key from the previous step:
+2. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/chainlink/PriceFeedConsumer.sol
 
-```
-solana airdrop 5 $(solana-keygen pubkey ./id.json) --url https://api.devnet.solana.com
-```
+## 🏗️ Architecture
 
-Next, build the program:
+### Smart Contracts
 
-```
-anchor build
-```
+#### CollManagement Contract (Sepolia)
+Manages user collateral and initiates cross-chain borrowing requests.
 
-The build process generates the keypair for your program's account. Before you deploy your program, you must update this public key in this line `lib.rs` file.
+#### CollManagement Contract (Sepolia)
+**Contract Address**: [0xd4aa953485eF4f1A916e42b9350Ab510f0920465](https://sepolia.etherscan.io/address/0xd4aa953485eF4f1A916e42b9350Ab510f0920465)
 
-```
-declare_id!("GEgDWT7Cc8H5S1o2YnTp3umiciazQj5fKbftPXkc2TsL");
-```
+**Main Functions:**
+- `depositCollateral(amount)`: Deposit collateral tokens
+- `userCollateral(user)`: Query user's collateral balance
 
-To do this, you need to run the command below:
+#### BorrowManagement Contract (Avalanche)
+**Contract Address**: [0x8828210BCdC39fB6A6cA01861970825F317F58d6](https://testnet.snowtrace.io/address/0x8828210BCdC39fB6A6cA01861970825F317F58d6)
 
-```
-anchor keys sync
-```
+Executes borrowing on target chain and receives cross-chain loan requests.
 
-After this command, check the file `lib.rs` again. The line will be updated as below (you may find diffretn value within the `declare_id!()`)
+**Main Functions:**
+- `borrowApply(borrowAmount)`: Apply for loan with specified amount
+- `ccipReceive(message)`: Receive cross-chain borrow requests
+- `userBorrowed(user)`: Query user's borrowed amount
 
-```
-declare_id!("JC16qi56dgcLoaTVe4BvnCoDL6FhH5NtahA7jmWZFdqm");
-```
+### Cross-Chain Data Structure
 
-Finally, because you updated the source code with the generated program ID, you need to rebuild the program to regenerate the associated files for deployment, and then it can be deployed to devnet
-
-```
-anchor build
-anchor deploy --provider.cluster devnet
+```solidity
+struct BorrowInfo {
+    address user;                // User address
+    address token;               // Collateral/loan token
+    uint256 amount;              // Amount
+    uint64 sourceChainSelector;  // Source chain ID
+    uint64 targetChainSelector;  // Target chain ID
+}
 ```
 
-Once you have successfully deployed the program, the terminal output will specify the program ID of the program, it should match the value you inserted into the `lib.rs` file and the `Anchor.toml` file. Once again, take note of this Program ID, as it will be required when executing the client:
+## 🖥️ Frontend Integration
 
-```
-Deploying workspace: https://api.devnet.solana.com
-Upgrade authority: ./id.json
-Deploying program "chainlink_solana_demo"...
-Program path: ./target/deploy/chainlink_solana_demo.so...
-Program Id: JC16qi56dgcLoaTVe4BvnCoDL6FhH5NtahA7jmWZFdqm
-```
+The frontend enables users to deposit WETH collateral and borrow USDC via three main components:
 
-### Running the Client
+### Components
 
-The first step is to set the Anchor [environment variables](https://www.twilio.com/blog/2017/01/how-to-set-environment-variables.html). These are required by the Anchor framework to determine which provider to use and which wallet to use for interacting with the deployed program:
+#### DepositForm (`deposit-form.tsx`)
+- **Purpose**: Deposits WETH collateral on Sepolia via `CollManagement.sol`
+- **Features**: WETH selection, amount input, Fuji recipient specification, transaction preview
 
-```
-export ANCHOR_PROVIDER_URL='https://api.devnet.solana.com'
-export ANCHOR_WALLET='./id.json'
-```
+#### BorrowInterface (`borrow-interface.tsx`)
+- **Purpose**: Borrows USDC via `borrowApply` in `BorrowManagement.sol` implemented on Avalanche
+- **Contract**: [BorrowManagement](https://testnet.snowtrace.io/address/0x8828210BCdC39fB6A6cA01861970825F317F58d6)
+- **Features**: USDC borrowing, health factor display, liquidation price calculation
 
-Now you are ready to run the JavaScript client. Be sure to pass Chainlink data feed address that you want to query. This can be taken from the [Chainlink Solana Data Feeds page](https://docs.chain.link/docs/solana/data-feeds-solana/), and the value will be defaulted to the Devnet SOL/USD feed address if you don't specify a value. In this example, we specified the ETH/USD feed:
+#### AvailableBorrowing (`available-borrowing.tsx`)
+- **Purpose**: Displays borrow balance and collateral details
+- **Features**: Real-time balance queries, collateral data fetching, available USDC calculation
 
-```
-node client.js --feed	669U43LNHx7LsVj95uYksnhXUfWKDsdzVqev3V4Jpw3P
-```
+### Technical Stack
+- **Frontend**: React, TypeScript, ethers.js
+- **Chains**: Sepolia (Collateral), Avalanche Fuji (Borrowing)
+- **Tokens**: WETH (`0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`), USDC (`0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1`)
 
-The client will generate a new account and pass it to the deployed program, which will then populate the account with the current price from the specified price feed. The client will then read the price from the account, and output the value to the console.
+## 🚀 Getting Started
 
-```
-Running client...
-priceFeedAccount public key: DNQBqwGijKix2EmKhMMaftZgSywcbfnQZSzfDyEMEfLf
-user public key: GWKzUMdSF8Y4xQ3JANTChkaJDFE4UdkvAkHCknmJtJUX
-Fetching transaction logs...
-[
-  'Program BrEqc6zHVR77jrP6U6WZLUV24AZ9UnHrWfDQTDV7VoDY invoke [1]',
-  'Program log: Instruction: Execute',
-  'Program 11111111111111111111111111111111 invoke [2]',
-  'Program 11111111111111111111111111111111 success',
-  'Program HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny invoke [2]',
-  'Program log: Instruction: Query',
-  'Program HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny consumed 2551 of 1360424 compute units',
-  'Program return: HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny RZ0GABn5swcAAAAA3ltiYgAVg8dFAAAAAAAAAAAAAAA=',
-  'Program HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny success',
-  'Program HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny invoke [2]',
-  'Program log: Instruction: Query',
-  'Program HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny consumed 2245 of 1328033 compute units',
-  'Program return: HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny CQAAAEVUSCAvIFVTRA==',
-  'Program HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny success',
-  'Program HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny invoke [2]',
-  'Program log: Instruction: Query',
-  'Program HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny consumed 1826 of 1295650 compute units',
-  'Program return: HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny CA==',
-  'Program HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny success',
-  'Program log: ETH / USD price is 2997.00000000',
-  'Program BrEqc6zHVR77jrP6U6WZLUV24AZ9UnHrWfDQTDV7VoDY consumed 109699 of 1400000 compute units',
-  'Program return: BrEqc6zHVR77jrP6U6WZLUV24AZ9UnHrWfDQTDV7VoDY CA==',
-  'Program BrEqc6zHVR77jrP6U6WZLUV24AZ9UnHrWfDQTDV7VoDY success'
-]
-Price Is: 2997
-Success
-```
+### Prerequisites
+- Node.js (v16+)
+- MetaMask or compatible Web3 wallet
+- Testnet ETH for Sepolia and AVAX for Fuji
 
-### Running the Read Only Clients
+### Installation
 
-To facilitate the scenario of purely requiring Chainlink Price Feed data off-chain, we have also included a second `read-data` client that queries a specified price feed and returns the latest price data. This version of the client does not generate a transaction, and therefore requires no accounts created or transaction fees. To run the read-data client, first you should ensure you have set the required Anchor environment variables. You can skip this step if you already did it earlier before running the normal client:
+**ElizaOS Agent Setup Guide** -> https://github.com/N-45div/chromium-hackathon/blob/stratoLend/eliza-agent/README.md
 
-```
-export ANCHOR_PROVIDER_URL='https://api.devnet.solana.com'
-export ANCHOR_WALLET='./id.json'
-```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/N-45div/chromium-hackathon.git
+   cd chromium-hackathon
+   ```
 
-Next, you can set the value of the `CHAINLINK_FEED_ADDRESS` static variable to the value of the [Price Feed account address](https://docs.chain.link/docs/solana/data-feeds-solana/) that you wish to query. This example queries the ETH/USD feed on Devnet:
+2. **Install dependencies**
+   ```bash
+   cd frontend
+   npm install
+   ```
 
-```
-const CHAINLINK_FEED_ADDRESS="669U43LNHx7LsVj95uYksnhXUfWKDsdzVqev3V4Jpw3P"
-```
+3. **Run the frontend**
+   ```bash
+   npm run dev
+   ```
 
-Once you save your file, you can then execute the client. There is a [Typescript](https://github.com/smartcontractkit/solana-starter-kit/blob/main/read-data.ts) and a [JavaScript](https://github.com/smartcontractkit/solana-starter-kit/blob/main/read-data.js) version:
+### Usage
 
-Typescript:
+#### Step 1: Approve the CollManagement Contract
+**Contract to call**: mockCollateralWETH (`0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`)
+- **Function**: `approve(spender, amount)`
+- **Parameters**:
+  - `spender (address)`: The CollManagement contract address: `0xd4aa953485eF4f1A916e42b9350Ab510f0920465`
+  - `amount (uint256)`: The amount of WETH the user wishes to deposit (in wei)
 
-```
-npm run read-data
-```
+#### Step 2: Deposit Collateral
+**Contract to call**: CollManagement (`0xd4aa953485eF4f1A916e42b9350Ab510f0920465`)
+- **Function**: `deposit(collateralToken, collateralAmount, recipient)`
+- **Parameters**:
+  - `collateralToken (address)`: The mockCollateralWETH address: `0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`
+  - `collateralAmount (uint256)`: The amount of WETH to deposit (in wei). Must be less than or equal to the approved amount
+  - `recipient (address)`: **Crucial parameter** - This is the address on the Avalanche Fuji network that will be authorized to borrow. It can be the same as the depositor's address or a different one
 
-JavaScript:
+#### Step 3: Switch to Avalanche Fuji
+Switch your MetaMask to Avalanche Fuji testnet to proceed with borrowing.
 
-```
-node read-data.js
-```
+#### Step 4: Borrow USDC
+Use BorrowInterface to borrow USDC against your collateral via the `borrowApply` function.
 
-The client will query the specified price feed using the published [Chainlink Solana NPM package](https://www.npmjs.com/package/@chainlink/solana-sdk), and will then continuously just print the latest price to the console.
+#### Step 5: Monitor Position
+View your borrowing status and health factor in real-time.
 
-```
-pappas99@Pappas solana-starter-kit % npm run read-data
-> @ read-data /Users/pappas99/GitHub/22-hackathon/solana-starter-kit
-> ts-node ./read-data.ts
+## 🔐 Security Features
 
-301296000000
-301250000000
-301215000000
-301205000000
-301331000000
-```
+- **Multi-signature controls** for large operations
+- **AI-powered monitoring** using ElizaOS agents
+- **Insurance partnerships** for additional protection
+- **Robust liquidation management** system
+- **Cross-chain security** through enhanced CCIP integration
 
-### Testing
+## 🛣️ Roadmap
 
-You can execute the [integration test](./tests/chainlink-solana-demo-int-test.ts) with the following command
+### Phase 1 (Current)
+- ✅ Cross-chain lending MVP
+- ✅ Chainlink integration
+- ✅ Basic frontend interface
+- ✅ AI liquidation protection
 
-```bash
-anchor test
-```
+### Phase 2 (Q2 2025)
+- 🔄 Multi-chain expansion (Polygon, Arbitrum)
+- 🔄 Advanced yield optimization
+- 🔄 Professional API suite
+- 🔄 Insurance integration
 
-The integration test checks that the value of the specified price feed account (defaulted to SOL/USD) on Devnet is greater than 0.
+### Phase 3 (Q3 2025)
+- 🔄 Zero-knowledge privacy features
+- 🔄 Institutional KYC/AML
+- 🔄 Advanced risk management
+- 🔄 Governance token launch
 
-```bash
- solana-starter-kit
+## 📊 Market Impact
 
-Price Is: 105.52
-    ✔ Query SOL/USD Price Feed! (4521ms)
+- **Target Market**: $50B+ fragmented DeFi liquidity
+- **Primary Users**: Institutional investors, hedge funds, high-net-worth individuals
+- **Competitive Advantage**: First institutional-grade cross-chain lending solution
 
+## 📜 License
 
-  1 passing (5s)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-✨  Done in 10.49s.
-```
+---
+
+**Built for the Chainlink Hackathon 2025**
+
+*Empowering institutional DeFi through secure, cross-chain infrastructure.*

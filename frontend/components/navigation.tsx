@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ConnectWalletButton } from "./connect-wallet-button"
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui"
 import { cn } from "@/lib/utils"
 import { Menu, X } from "lucide-react"
 import { useState } from "react"
@@ -11,10 +11,10 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard" },
   { name: "Deposit", href: "/deposit" },
   { name: "Borrow", href: "/borrow" },
+  { name: "Transfer", href: "/ccip-transfer" },
   { name: "Positions", href: "/positions" },
   { name: "Analytics", href: "/analytics" },
   { name: "Security", href: "/security" },
-  { name: "CCIP Transfer", href: "/ccip-transfer" },
 ]
 
 export function Navigation() {
@@ -55,7 +55,7 @@ export function Navigation() {
           </div>
 
           <div className="flex items-center space-x-4">
-            <ConnectWalletButton />
+            <WalletMultiButton />
 
             {/* Mobile menu button */}
             <div className="md:hidden">

@@ -1,267 +1,173 @@
-// frontend/components/ccip-transfer-form.tsx
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
-// Updated import path to the new frontend config file
-import { ChainId, CHAIN_SELECTORS, FeeTokenType as ConfigFeeTokenType, getFrontendCCIPSVMConfig, frontendTokens } from "@/lib/ccipConfig";
-import * as ChainlinkSolanaSDK from "@chainlink/solana-sdk";
-import { ethers } from "ethers";
+"use client"
 
-// Use constants from the new config file
-const supportedSourceChains = [
-  { id: ChainId.SOLANA_DEVNET, name: "Solana Devnet" },
-];
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { useToast } from "@/hooks/use-toast"
 
-const supportedDestinationChains = [
-  { id: ChainId.ETHEREUM_SEPOLIA, name: "Ethereum Sepolia" },
-];
+export function CCIPTransferForm() {
+  const [destinationChain, setDestinationChain] = useState("")
+  const [token, setToken] = useState("")
+  const [amount, setAmount] = useState("")
+  const [recipient, setRecipient] = useState("")
+  const { toast } = useToast()
 
-// Use tokens from the new config file
-const availableTokens = frontendTokens.filter(token => token.chainId === ChainId.SOLANA_DEVNET);
-
-export default function CCIPTransferForm() {
-  const { connection } = useConnection();
-  const { publicKey, sendTransaction, connected, select } = useWallet();
-  const { toast } = useToast();
-
-  const [sourceChainId, setSourceChainId] = useState<ChainId>(ChainId.SOLANA_DEVNET);
-  const [destinationChainId, setDestinationChainId] = useState<ChainId>(ChainId.ETHEREUM_SEPOLIA);
-  // Ensure availableTokens is not empty before accessing its first element
-  const [selectedTokenAddress, setSelectedTokenAddress] = useState<string>(availableTokens.length > 0 ? availableTokens[0].address : "");
-  const [tokenAmount, setTokenAmount] = useState<string>("");
-  const [receiverAddress, setReceiverAddress] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  const selectedToken = availableTokens.find(t => t.address === selectedTokenAddress);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!connected || !publicKey || !selectedToken) {
+  const handleSubmit = async () => {
+    if (!destinationChain || !token || !amount || !recipient) {
       toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your Solana wallet to proceed.",
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Clean the amount string: remove commas and ensure it's a valid number format
+    const cleanedAmount = amount.replace(/,/g, '');
+    if (isNaN(Number(cleanedAmount))) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid number for the amount",
         variant: "destructive",
       });
       return;
     }
-
-    if (!ethers.isAddress(receiverAddress)) {
-      toast({
-        title: "Invalid Receiver Address",
-        description: "Please enter a valid EVM receiver address (e.g., 0x...).",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const amount = parseFloat(tokenAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({
-        title: "Invalid Token Amount",
-        description: "Please enter a valid token amount.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    toast({ title: "Processing Transfer", description: "Please wait..." });
 
     try {
-      // Use the new frontend config getter
-      const ccipConfig = getFrontendCCIPSVMConfig(sourceChainId);
-      if (!ccipConfig) {
-        throw new Error(`Configuration not found for chain ${sourceChainId}`);
-      }
-
-      const routerClient = new CCIPRouterClient(
-        connection,
-        publicKey,
-        new PublicKey(ccipConfig.routerProgramId) // Use routerProgramId from frontend config
-      );
-
-      const tokenDecimals = selectedToken.decimals;
-      const rawAmount = ethers.parseUnits(tokenAmount, tokenDecimals).toString();
-
-      const tokenAmounts: ChainlinkSolanaSDK.TokenAmount[] = [{ // Adjusted type
-        tokenMint: new PublicKey(selectedTokenAddress),
-        amount: rawAmount,
-      }];
-
-      const feeTokenAddress = ConfigFeeTokenType.NATIVE; // Using SOL for fees
-
-      const message = {
-        destinationChainSelector: CHAIN_SELECTORS[destinationChainId].toString(),
-        receiver: ethers.getBytes(ethers.zeroPadValue(receiverAddress, 32)), // Must be 32 bytes
-        tokenAmounts: tokenAmounts,
-        feeToken: feeTokenAddress, // Address of fee token, or SystemProgram.programId for native
-        extraArgs: {
-          gasLimit: BigInt(0), // No execution on destination for token transfers
-          allowOutOfOrderExecution: true,
-        }
-      };
-
-      console.log("Preparing CCIP message:", message);
-
-      // 1. Get CCIP Fee
-      const fee = await routerClient.getFee(message);
-      console.log("Calculated CCIP Fee:", fee.toString());
-      toast({ title: "CCIP Fee Calculated", description: `Fee: ${ethers.formatUnits(fee, 'gwei')} GWEI (approx)` }); // SOL fees are in lamports
-
-      // 2. Build Transaction (this part is highly simplified and needs proper error handling and user confirmation)
-      // The actual `sendTokens` or equivalent method from the SDK would build this.
-      // For now, this is a placeholder for the actual transaction creation.
-      // The SDK's `sendTokens` method would typically handle token approvals (delegation) as well.
-      // This example assumes approvals are already handled or are part of the `sendTokens` internal logic.
-
-      // const transaction = await routerClient.sendTokens(message, fee); // Ideal SDK usage
-      // For demonstration, let's assume `sendTokens` returns a transaction object.
-      // Since we don't have a full `sendTokens` that returns a transaction directly for `sendTransaction`
-      // this part will be a placeholder. The actual SDK might require multiple transactions or specific instructions.
-
-      // Placeholder: The actual transaction building and sending would be more complex
-      // and should use methods from `@chainlink/solana-sdk` like `routerClient.sendTokens(...)`
-      // which internally constructs and sends the transaction.
-      // The `sendTransaction` from `useWallet` expects a `Transaction` object.
-
-      // This is a conceptual placeholder. The actual SDK usage might be different.
-      // The `CCIPRouterClient` from `@chainlink/solana-sdk`'s `sendTokens` method
-      // likely handles the transaction creation and sending internally or returns instructions.
-      // For now, we'll simulate the success path.
-
-      // Simulate transaction sending
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate network delay
-      const mockTxSignature = `simulated_tx_${Date.now()}`;
-
-      console.log("Transaction sent (simulated), signature:", mockTxSignature);
-
-      toast({
-        title: "Transfer Initiated (Simulation)",
-        description: `Transfer of ${tokenAmount} ${selectedToken.name} to ${receiverAddress} on ${supportedDestinationChains.find(c => c.id === destinationChainId)?.name}. Tx: ${mockTxSignature.substring(0, 20)}...`,
+      const response = await fetch("http://localhost:3001/api/svm-to-evm-transfer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          destinationChain,
+          token,
+          amount: cleanedAmount, // Use the cleaned amount
+          recipient,
+        }),
       });
-      setTokenAmount("");
-      // setReceiverAddress(""); // Keep receiver address for subsequent transfers if user wants
 
+      const data = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: "Transfer Initiated",
+          description: (
+            <div>
+              <p>{data.message || "SVM to EVM transfer initiated successfully."}</p>
+              {data.txSignature && <p>Transaction Signature: {data.txSignature}</p>}
+              {data.messageId && (
+                <p>
+                  Message ID: {data.messageId}{' '}
+                  {data.ccipExplorerUrl && (
+                    <a href={data.ccipExplorerUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">
+                      View on CCIP Explorer
+                    </a>
+                  )}
+                </p>
+              )}
+            </div>
+          ),
+        });
+      } else {
+        toast({
+          title: "Transfer Failed",
+          description: data.error || "An unknown error occurred during transfer.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
-      console.error("Transfer failed:", error);
+      console.error("Error during fetch:", error);
       toast({
-        title: "Transfer Failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred during the transfer process.",
+        title: "Network Error",
+        description: "Could not connect to the backend server.",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (!publicKey) {
-      // Prompt wallet selection if not connected and no wallet is selected yet.
-      // select(PhantomWalletName); // Or your preferred default wallet
-    }
-  }, [publicKey, select]);
+  }
 
   return (
-    <div className="space-y-6 max-w-lg mx-auto p-6 border rounded-lg shadow-md">
-      <div className="flex justify-end">
-        <WalletMultiButton />
-      </div>
-
-      {connected && publicKey && (
-        <p className="text-sm text-muted-foreground">Connected: {publicKey.toBase58().substring(0,6)}...{publicKey.toBase58().slice(-4)}</p>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <Label htmlFor="sourceChain">Source Chain</Label>
-          <Select value={sourceChainId} onValueChange={(value) => setSourceChainId(value as ChainId)} disabled>
-            <SelectTrigger id="sourceChain">
-              <SelectValue placeholder="Select source chain" />
+    <Card className="w-full max-w-2xl bg-slate-800 border-slate-700 text-white">
+      <CardHeader>
+        <CardTitle className="text-2xl">Cross-Chain Transfer</CardTitle>
+        <CardDescription>
+          Transfer tokens from Solana to an EVM chain.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-6">
+        <div className="grid gap-2">
+          <Label htmlFor="destination-chain">Destination Chain</Label>
+          <Select onValueChange={setDestinationChain}>
+            <SelectTrigger
+              id="destination-chain"
+              className="bg-slate-700 border-slate-600"
+            >
+              <SelectValue placeholder="Select a chain" />
             </SelectTrigger>
             <SelectContent>
-              {supportedSourceChains.map((chain) => (
-                <SelectItem key={chain.id} value={chain.id} disabled={chain.id !== ChainId.SOLANA_DEVNET}>
-                  {chain.name}
-                </SelectItem>
-              ))}
+              <SelectItem value="ETHEREUM_SEPOLIA">Ethereum Sepolia</SelectItem>
+              <SelectItem value="BASE_SEPOLIA">Base Sepolia</SelectItem>
+              <SelectItem value="ARBITRUM_SEPOLIA">Arbitrum Sepolia</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-sm text-muted-foreground mt-1">Currently supports Solana Devnet only.</p>
         </div>
-
-        <div>
-          <Label htmlFor="destinationChain">Destination Chain</Label>
-          <Select value={destinationChainId} onValueChange={(value) => setDestinationChainId(value as ChainId)} disabled>
-            <SelectTrigger id="destinationChain">
-              <SelectValue placeholder="Select destination chain" />
-            </SelectTrigger>
-            <SelectContent>
-              {supportedDestinationChains.map((chain) => (
-                <SelectItem key={chain.id} value={chain.id} disabled={chain.id !== ChainId.ETHEREUM_SEPOLIA}>
-                  {chain.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-sm text-muted-foreground mt-1">Currently supports Ethereum Sepolia only.</p>
-        </div>
-
-        <div>
-          <Label htmlFor="tokenAddress">Token (Solana)</Label>
-          <Select value={selectedTokenAddress} onValueChange={setSelectedTokenAddress}>
-            <SelectTrigger id="tokenAddress">
-              <SelectValue placeholder="Select token" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableTokens.map((token) => (
-                <SelectItem key={token.id} value={token.address}>
-                  {token.name} ({token.address.substring(0, 6)}...)
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedToken && <p className="text-sm text-muted-foreground mt-1">Decimals: {selectedToken.decimals}</p>}
-        </div>
-
-        <div>
-          <Label htmlFor="tokenAmount">Token Amount</Label>
+        <div className="grid gap-2">
+          <Label htmlFor="token">Token</Label>
           <Input
-            id="tokenAmount"
-            type="number"
-            value={tokenAmount}
-            onChange={(e) => setTokenAmount(e.target.value)}
-            placeholder="e.g., 10.0"
-            required
-            step="any"
+            id="token"
+            placeholder="Enter token address"
+            className="bg-slate-700 border-slate-600"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
           />
-          <p className="text-sm text-muted-foreground mt-1">Enter the amount of tokens to transfer.</p>
         </div>
-
-        <div>
-          <Label htmlFor="receiverAddress">Receiver Address (EVM)</Label>
+        <div className="grid gap-2">
+          <Label htmlFor="amount">Amount</Label>
           <Input
-            id="receiverAddress"
-            type="text"
-            value={receiverAddress}
-            onChange={(e) => setReceiverAddress(e.target.value)}
-            placeholder="0x..."
-            required
+            id="amount"
+            placeholder="Enter amount"
+            className="bg-slate-700 border-slate-600"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
           />
-          <p className="text-sm text-muted-foreground mt-1">Enter the recipient's Ethereum address (e.g., 0x123...).</p>
         </div>
-
-        <Button type="submit" className="w-full" disabled={isLoading || !connected}>
-          {isLoading ? "Processing..." : (connected ? "Initiate Transfer" : "Connect Wallet to Transfer")}
+        <div className="grid gap-2">
+          <Label htmlFor="recipient">Recipient</Label>
+          <Input
+            id="recipient"
+            placeholder="Enter recipient address"
+            className="bg-slate-700 border-slate-600"
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+          />
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button
+          className="w-full bg-teal-600 hover:bg-teal-700"
+          onClick={handleSubmit}
+        >
+          Transfer
         </Button>
-      </form>
-    </div>
-  );
+      </CardFooter>
+    </Card>
+  )
 }

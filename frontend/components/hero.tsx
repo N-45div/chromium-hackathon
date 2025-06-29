@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { ConnectWalletButton } from "./connect-wallet-button"
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui"
 import { ArrowRight, Zap } from "lucide-react"
 import Link from "next/link"
 
@@ -36,7 +36,7 @@ export function Hero() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <ConnectWalletButton size="lg" className="text-lg px-8 py-4" />
+            <WalletMultiButton className="text-lg px-8 py-4" />
             <Link href="/dashboard">
               <Button
                 variant="outline"
