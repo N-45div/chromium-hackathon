@@ -67,7 +67,7 @@ Our protocol leverages multiple Chainlink services for robust cross-chain operat
 
 **Chainlink Price Feeds** : 
 
-1. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L540
+1. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L557
 
 2. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/chainlink/PriceFeedConsumer.sol
 
