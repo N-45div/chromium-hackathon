@@ -22,7 +22,7 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@chainlink/contracts": "^1.9.1",
+    "@chainlink/contracts": "^1.4.0",
     "@nomicfoundation/hardhat-toolbox": "^6.0.0",
     "@types/uuid": "^10.0.0",
     "dotenv": "^17.0.0",
