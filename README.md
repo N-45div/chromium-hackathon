@@ -58,8 +58,6 @@ Our protocol leverages multiple Chainlink services for robust cross-chain operat
 
 - **[Chainlink CCIP](https://docs.chain.link/ccip/api-reference/evm/v1.6.0/)**: Secure cross-chain messaging between collateral and borrowing chains
 - **[Chainlink Price Feeds](https://docs.chain.link/docs/using-chainlink-reference-contracts)**: Real-time asset pricing for accurate collateral valuation
-- **[Chainlink Automation](https://docs.chain.link/chainlink-automation/introduction)**: Automated liquidation protection and yield optimization
-- **[Chainlink VRF V2](https://docs.chain.link/docs/chainlink-vrf)**: Secure randomization for risk management algorithms
 
 ## 🏗️ Architecture
 
