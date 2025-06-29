@@ -1,18 +1,18 @@
 # Cross-Chain Contract Deployment Guide
 
-This document outlines the deployment process for the cross-chain lending protocol on the Sepolia (source) and Avalanche Fuji (target) testnets.
+This document outlines the deployment process for the cross-chain lending protocol on the Sepolia (source) and Avalanche Fuji (target) testnets. It includes instructions for deploying the core lending contracts and an optional, modular ZK privacy layer.
 
 ## Deployed Contract Addresses
 
 ### Sepolia (Source Chain - Chain ID: 11155111)
 
 *   **`CollManagement`**: [`0xd4aa953485eF4f1A916e42b9350Ab510f0920465`](https://sepolia.etherscan.io/address/0xd4aa953485eF4f1A916e42b9350Ab510f0920465)
-*   **`PrivacyPool`**: [`0xc2e58a9455Dfe1252826d1ef5284FAb097cE3E37`](https://sepolia.etherscan.io/address/0xc2e58a9455Dfe1252826d1ef5284FAb097cE3E37)
+*   **`PrivacyProxy`**: [`0xB4b8b2ed36407eE96A42954308E023fA9eAe2437`](https://sepolia.etherscan.io/address/0xB4b8b2ed36407eE96A42954308E023fA9eAe2437)
 *   **`mockCollateralWETH`**: [`0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`](https://sepolia.etherscan.io/address/0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764)
 
 ### Avalanche Fuji (Target Chain - Chain ID: 43113)
 
-*   **`BorrowManagement`**: [`0xae4E4BDdE6Eb2F040aB9d34EA74086b3a8311389`](https://testnet.snowtrace.io/address/0xae4E4BDdE6Eb2F040aB9d34EA74086b3a8311389)
+*   **`BorrowManagement`**: [`0x8828210BCdC39fB6A6cA01861970825F317F58d6`](https://testnet.snowtrace.io/address/0x8828210BCdC39fB6A6cA01861970825F317F58d6)
 *   **`PrivacyPool`**: [`0x042e5B9A43a48f5574E0ee2DD3685CB741E82c96`](https://testnet.snowtrace.io/address/0x042e5B9A43a48f5574E0ee2DD3685CB741E82c96)
 *   **`mockBorrowUSDC`**: [`0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1`](https://testnet.snowtrace.io/address/0x9A133558fF7349f7721f3dD2b0E193e55ae9A3F1)
 
@@ -22,21 +22,15 @@ This document outlines the deployment process for the cross-chain lending protoc
 
 The deployment process is managed by scripts in `script/DeployContracts.s.sol`. Ensure your `.env` file has `PRIVATE_KEY`, `SEPOLIA_RPC_URL`, and `AVALANCHE_FUJI_RPC_URL` set.
 
-### Step 1: Deploy Prerequisite Contracts on Sepolia
+### Step 1: Deploy Prerequisite Mock Tokens
 
-This deploys `mockCollateralWETH` and `PrivacyPool` on the source chain.
+This deploys the mock `WETH` and `USDC` tokens required for the protocol to function.
 
 ```bash
-# Deploys mockCollateralWETH and PrivacyPool to Sepolia
+# Deploy mockCollateralWETH to Sepolia
 forge script script/DeployContracts.s.sol:DeployPrepareContractForSourceChain --rpc-url sepolia --broadcast --sig "run(uint256)" -- 11155111 -vvv
-```
 
-### Step 2: Deploy Prerequisite Contracts on Fuji
-
-This deploys `mockBorrowUSDC` and `PrivacyPool` on the target chain.
-
-```bash
-# Deploys mockBorrowUSDC and PrivacyPool to Fuji
+# Deploy mockBorrowUSDC to Fuji
 forge script script/DeployContracts.s.sol:DeployPrepareContractForTargetChain --rpc-url fuji --broadcast --sig "run(uint256)" -- 43113 -vvv
 ```
 
@@ -53,6 +47,27 @@ forge script script/DeployContracts.s.sol:DeployCollManagementSender --rpc-url s
 # Params: <targetBlockChainID>, <sourceCollateralToken>, <targetBorrowUSDC>, <targetChainPrivacyPool>
 forge script script/DeployContracts.s.sol:DeployBorrowManagementReceiver --rpc-url fuji --broadcast --sig "run(uint256,address,address,address)" -- 43113 <WETH_ADDRESS> <USDC_ADDRESS> <FUJI_PRIVACY_POOL_ADDRESS> -vvv
 ```
+
+### Step 3: Deploying the ZK Privacy Module (Optional)
+
+This step deploys the modular ZK privacy layer. This is only required if you want to enable private deposits and borrows.
+
+**Prerequisites:**
+1.  The `CollManagement` contract must already be deployed.
+2.  The ZK verifier contracts must be generated. If they don't exist in `src/core/privacy/verifiers/`, run the following command from the `circuits` directory:
+    ```bash
+    bash ./build-zk.sh
+    ```
+
+**Deployment Command:**
+
+```bash
+# Deploy the PrivacyProxy and its verifiers
+# Params: <collManagementAddress>, <chainID>
+forge script script/DeployPrivacy.s.sol:DeployPrivacy --rpc-url sepolia --broadcast --sig "run(address,uint256)" -- <COLL_MGMT_ADDR> 11155111 -vvv
+```
+
+This will deploy `DepositVerifier`, `BorrowVerifier`, and the `PrivacyProxy` contract, linking it to the main `CollManagement` contract.
 
 ### Step 4: Configure Cross-Chain Communication
 
@@ -197,3 +212,43 @@ Call the `borrowApply` function on the `BorrowManagement` contract.
 *   **Function**: `borrowApply(borrowAmount)`
 *   **Parameters**:
     *   `borrowAmount` (uint256): The amount of `mockBorrowUSDC` the user wants to borrow (in its decimal format). The contract will automatically check if this amount is within the user's credit limit based on their collateral.
+
+### User Flow 3: Private Deposit via ZK (on Sepolia)
+
+This flow allows a user to deposit `WETH` as collateral privately. It breaks the link between the user's deposit address and their future borrowing activity.
+
+**High-Level Concept:**
+
+The user's browser or wallet will perform the following steps off-chain before sending a transaction:
+1.  **Generate Secrets:** Create two large random numbers: a `nullifier` and a `secret`.
+2.  **Create Commitment:** Hash the secrets together to create a `commitment`. This is what gets stored on-chain. `commitment = hash(nullifier, secret)`.
+3.  **Generate ZK Proof:** Use the project's circuits (`deposit.circom`) and a library like `snarkjs` to generate a ZK-SNARK. This proof mathematically proves that the user knows the `nullifier` and `secret` for a given `commitment` without revealing them.
+
+**Prerequisites:**
+
+*   **Contract ABI**: The ABI for the `PrivacyProxy` contract is located in the project's `out/` directory at: `out/core/privacy/PrivacyProxy.sol/PrivacyProxy.json`.
+
+**UX Note:** The UI for this flow should be active only when the user's wallet is connected to Sepolia (Chain ID: `11155111`).
+
+**Step 1: Approve the `PrivacyProxy` Contract**
+
+Before depositing, the user must approve the `PrivacyProxy` contract to transfer their `mockCollateralWETH` tokens.
+
+*   **Contract to call**: `mockCollateralWETH` (`0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`)
+*   **Function**: `approve(spender, amount)`
+*   **Parameters**:
+    *   `spender` (address): The `PrivacyProxy` contract address: `0xB4b8b2ed36407eE96A42954308E023fA9eAe2437`.
+    *   `amount` (uint256): The amount of WETH the user wishes to deposit (in wei).
+
+**Step 2: Deposit with Commitment**
+
+Once the approval is confirmed, call the `deposit` function on the `PrivacyProxy` contract.
+
+*   **Contract to call**: `PrivacyProxy` (`0xB4b8b2ed36407eE96A42954308E023fA9eAe2437`)
+*   **Function**: `deposit(token, amount, commitment)`
+*   **Parameters**:
+    *   `token` (address): The `mockCollateralWETH` address: `0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`.
+    *   `amount` (uint256): The amount of WETH to deposit.
+    *   `commitment` (uint256): The `commitment` hash generated off-chain.
+
+**Note on ZK Proof Verification:** In the current implementation of `PrivacyProxy.sol`, the on-chain `verifyProof` call is commented out for simplicity. A full production frontend would need to generate the proof and pass it as an additional argument to the `deposit` function.

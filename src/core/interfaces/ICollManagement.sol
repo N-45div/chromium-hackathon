@@ -30,7 +30,7 @@ interface ICollManagement {
      * @param _amount The amount to deposit.
      * @param _recipient The recipient address on the target chain.
      */
-    function depositCollateral(address _collateralToken, uint256 _amount, address _recipient) external;
+    function depositCollateral(address _collateralToken, uint256 _amount, address _recipient) external payable;
 
     function getHealthFactor(address user) external view returns (uint256);
 

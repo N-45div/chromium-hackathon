@@ -117,8 +117,8 @@ contract DeployBorrowManagementReceiver is Script, Helper {
         BorrowManagement receiver_borrowManagement = new BorrowManagement(
             targetBorrowUSDC, // _borrowToken
             targetRouter, // _router
-            linkToken, // _linkToken
-            targetChainPrivacyPool // _privacyPoolAddress
+            targetChainPrivacyPool, // _privacyPoolAddress
+            linkToken // _linkToken
         );
         console.log(
             "borrowManagement contract deployed on ",
@@ -158,25 +158,34 @@ contract SetRouterForStratoLendNetWorkForSource is Script, Helper {
 
 contract SetRouterForStratoLendNetWorkForTarget is Script, Helper {
     function run(
-        address sender_collManagement,
-        address receiver_borrowManagement,
-        address targetBorrowUSDC,
-        uint256 sourceBlockChainID, // ID of the source chain
-        uint256 targetBlockChainID // ID of the target chain (current chain)
-    ) external {
+        address targetBorrowManagement,
+        address sourceCollManagement,
+        address sourceCollateralToken,
+        uint256 sourceChainId,
+        uint256 targetChainId
+    ) public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        (,,, uint64 sourceChainSelector) = getConfigFromNetwork(sourceBlockChainID);
-        (,,, uint64 ownChainSelector_for_target) = getConfigFromNetwork(targetBlockChainID); // This is the target's own selector
-
-        BorrowManagement(receiver_borrowManagement).setSourceChainParams(
-            targetBorrowUSDC, // _collateralToken (which is borrow token for BorrowManagement)
-            sourceBlockChainID, // _sourceChainId
-            sourceChainSelector, // _sourceChainSelector
-            sender_collManagement, // _sourceChainCollManager
-            ownChainSelector_for_target // _ownChainSelector
+        // Get CCIP chain selector for the source chain (Sepolia)
+        (, , , uint64 sourceChainSelector) = getConfigFromNetwork(
+            sourceChainId
         );
+
+        // Get CCIP chain selector for the target chain (Fuji)
+        (, , , uint64 targetChainSelector) = getConfigFromNetwork(
+            targetChainId
+        );
+
+        // Call the correct function with the correct parameters
+        BorrowManagement(targetBorrowManagement).setSourceChainParams(
+            sourceCollateralToken,      // _collateralToken
+            sourceChainId,              // _sourceChainId
+            sourceChainSelector,        // _sourceChainSelector
+            sourceCollManagement,       // _sourceChainCollManager
+            targetChainSelector         // _ownChainSelector
+        );
+        
         vm.stopBroadcast();
     }
 }
