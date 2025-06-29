@@ -58,6 +58,8 @@ Our protocol leverages multiple Chainlink services for robust cross-chain operat
 
 - **[Chainlink CCIP](https://docs.chain.link/ccip/api-reference/evm/v1.6.0/)**: Secure cross-chain messaging between collateral and borrowing chains
 - **[Chainlink Price Feeds](https://docs.chain.link/docs/using-chainlink-reference-contracts)**: Real-time asset pricing for accurate collateral valuation
+- **[Chainlink Automation](https://docs.chain.link/chainlink-automation/introduction)**: Automated liquidation protection and yield optimization
+- **[Chainlink VRF V2](https://docs.chain.link/docs/chainlink-vrf)**: Secure randomization for risk management algorithms
 
 ## 🏗️ Architecture
 
@@ -125,8 +127,6 @@ The frontend enables users to deposit WETH collateral and borrow USDC via three 
 
 ### Installation
 
-ElizaOS Setup Guide -> https://github.com/N-45div/chromium-hackathon/blob/stratoLend/eliza-agent/README.md
-
 1. **Clone the repository**
    ```bash
    git clone https://github.com/your-repo/stratolend-network
@@ -151,11 +151,29 @@ ElizaOS Setup Guide -> https://github.com/N-45div/chromium-hackathon/blob/strato
 
 ### Usage
 
-1. **Connect Wallet**: Connect your MetaMask to Sepolia testnet
-2. **Deposit Collateral**: Use DepositForm to deposit WETH as collateral
-3. **Switch to Avalanche**: Switch to Avalanche Fuji testnet
-4. **Borrow USDC**: Use BorrowInterface to borrow USDC against your collateral
-5. **Monitor Position**: View your borrowing status and health factor
+#### Step 1: Approve the CollManagement Contract
+**Contract to call**: mockCollateralWETH (`0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`)
+- **Function**: `approve(spender, amount)`
+- **Parameters**:
+  - `spender (address)`: The CollManagement contract address: `0xd4aa953485eF4f1A916e42b9350Ab510f0920465`
+  - `amount (uint256)`: The amount of WETH the user wishes to deposit (in wei)
+
+#### Step 2: Deposit Collateral
+**Contract to call**: CollManagement (`0xd4aa953485eF4f1A916e42b9350Ab510f0920465`)
+- **Function**: `deposit(collateralToken, collateralAmount, recipient)`
+- **Parameters**:
+  - `collateralToken (address)`: The mockCollateralWETH address: `0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764`
+  - `collateralAmount (uint256)`: The amount of WETH to deposit (in wei). Must be less than or equal to the approved amount
+  - `recipient (address)`: **Crucial parameter** - This is the address on the Avalanche Fuji network that will be authorized to borrow. It can be the same as the depositor's address or a different one
+
+#### Step 3: Switch to Avalanche Fuji
+Switch your MetaMask to Avalanche Fuji testnet to proceed with borrowing.
+
+#### Step 4: Borrow USDC
+Use BorrowInterface to borrow USDC against your collateral via the `borrowApply` function.
+
+#### Step 5: Monitor Position
+View your borrowing status and health factor in real-time.
 
 ## 🔐 Security Features
 
@@ -197,6 +215,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Built for the Chainlink Hackathon 2025**
+**Built with for the Chainlink Hackathon 2025**
 
 *Empowering institutional DeFi through secure, cross-chain infrastructure.*
