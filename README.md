@@ -55,15 +55,15 @@ Our protocol leverages multiple Chainlink services for robust cross-chain operat
 
 **Chainlink CCIP** : 
  
-1. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L536
+1. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L436
 
 2. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/borrow/BorrowManagement.sol#L223
 
 3. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/borrow/BorrowManagement.sol#L446
 
-4. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L263
+4. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L264
 
-5. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L412
+5. https://github.com/N-45div/chromium-hackathon/blob/stratoLend/src/core/coll/CollManagement.sol#L413
 
 **Chainlink Price Feeds** : 
 
