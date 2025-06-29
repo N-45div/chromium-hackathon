@@ -97,15 +97,6 @@ export function DepositForm() {
     }
   }
 
-  // const test = async () => {
-  //   const provider = new ethers.BrowserProvider(window.ethereum);
-  //   const contract = new ethers.Contract('0xd4aa953485eF4f1A916e42b9350Ab510f0920465', CollManagementABI.abi, provider);
-  //   const userAddress = '0x76ACa6a6B825683408d28B71ed11d5463fA1496F';
-  //   const collateralToken = '0x4FE11290797DC5Cc82F20B950C263B0A2aCb1764'; // WETH
-  //   const userCollateral = await contract.userCollateral(userAddress, collateralToken);
-  //   console.log('Deposited WETH:', ethers.formatUnits(userCollateral.totalDeposited, 18));
-  // }
-
   const handleDeposit = async () => {
     if (!selectedToken || !amount || !recipient) {
       toast({ title: "Error", description: "Please select a token, enter an amount, and specify a recipient", variant: "destructive" })
