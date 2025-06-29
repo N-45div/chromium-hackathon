@@ -225,6 +225,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Built with for the Chainlink Hackathon 2025**
+**Built for the Chainlink Hackathon 2025**
 
 *Empowering institutional DeFi through secure, cross-chain infrastructure.*
