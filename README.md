@@ -140,6 +140,8 @@ The frontend enables users to deposit WETH collateral and borrow USDC via three 
 
 ### Installation
 
+**ElizaOS Agent Setup Guide** -> https://github.com/N-45div/chromium-hackathon/blob/stratoLend/eliza-agent/README.md
+
 1. **Clone the repository**
    ```bash
    git clone https://github.com/N-45div/chromium-hackathon.git
