@@ -63,14 +63,12 @@ export function BorrowInterface() {
       const userAddress = await signer.getAddress()
       const network = await provider.getNetwork()
       const chainId = Number(network.chainId)
-      console.log("Detected Chain ID:", chainId)
 
       const fujiProvider = new ethers.JsonRpcProvider(FUJI_RPC_URL)
       const borrowContract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, fujiProvider)
       let balanceInfo
       try {
         balanceInfo = await borrowContract.availableBorrowTokenBalance(userAddress)
-        console.log("Raw balanceInfo:", balanceInfo)
         const balanceFields = {
           collateralToken: balanceInfo[0] || ethers.ZeroAddress,
           borrowToken: balanceInfo[1] || ethers.ZeroAddress,
@@ -86,7 +84,6 @@ export function BorrowInterface() {
           updatedAt: balanceInfo[11]?.toString() || "0",
           merkleRoot: balanceInfo[12] || "0x",
         }
-        console.log("Balance info:", balanceFields)
         if (balanceFields.status !== "1") {
           console.log("Borrow not initialized. Attempting to borrow may fail.")
         } else {
@@ -105,11 +102,6 @@ export function BorrowInterface() {
       const collContract = new ethers.Contract(COLL_MANAGEMENT_ADDRESS, CollManagementABI.abi, sepoliaProvider)
       const collateralInfo = await collContract.userCollateral(userAddress, WETH_ADDRESS)
       const priceFeedAddress = await collContract.priceFeeds(WETH_ADDRESS)
-      console.log("Collateral info:", {
-        totalDeposited: collateralInfo.totalDeposited.toString(),
-        totalBorrowed: collateralInfo.totalBorrowed.toString(),
-        priceFeed: priceFeedAddress,
-      })
 
       const wethAmount = ethers.formatUnits(collateralInfo.totalDeposited, 18)
       let wethPriceUSD = 0
@@ -147,7 +139,7 @@ export function BorrowInterface() {
       }
       const data = await response.json()
       setLiquidationData(data)
-      toast({ title: "Liquidation Data Fetched", description: "Successfully loaded liquidation data via ElizaOS." })
+      console.log("Successfully loaded liquidation data via ElizaOS.");
     } catch (error) {
       console.error("Error fetching liquidation data:", error)
       toast({ title: "Error", description: "Failed to fetch liquidation data.", variant: "destructive" })
@@ -181,7 +173,6 @@ export function BorrowInterface() {
         displayHealthFactor = parseFloat(healthFactor).toFixed(2)
         toast({ title: "Health Factor Fetched", description: `Health Factor: ${displayHealthFactor}` })
       }
-      console.log("Display this in the UI:", displayHealthFactor)
       setHealthFactor(displayHealthFactor)
     } catch (error) {
       console.error("Error fetching health factor:", error)
@@ -208,13 +199,6 @@ export function BorrowInterface() {
       const userAddress = await signer.getAddress()
       const network = await provider.getNetwork()
       const chainId = Number(network.chainId)
-      console.log("Borrow attempt:", {
-        userAddress,
-        chainId,
-        selectedToken,
-        amount,
-        available,
-      })
 
       if (chainId !== CHAIN_IDS.FUJI) {
         toast({ title: "Network Required", description: `Please switch to Fuji (Chain ID: ${CHAIN_IDS.FUJI}) to borrow`, variant: "default" })
@@ -232,12 +216,6 @@ export function BorrowInterface() {
       console.log("Transaction sent:", { txHash: tx.hash, from: tx.from, to: tx.to, data: tx.data })
       toast({ title: "Borrow Request Sent", description: `Tx Hash: ${tx.hash}` })
       const receipt = await tx.wait()
-      console.log("Transaction receipt:", {
-        status: receipt.status,
-        gasUsed: receipt.gasUsed.toString(),
-        logs: receipt.logs,
-        blockNumber: receipt.blockNumber,
-      })
       toast({ title: "Borrow Confirmed", description: `Borrowed: ${amount} USDC` })
     } catch (error) {
       console.error("Borrow error:", {
