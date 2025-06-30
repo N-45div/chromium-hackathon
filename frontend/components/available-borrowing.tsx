@@ -68,7 +68,7 @@ export function AvailableBorrowing() {
         }
         console.log("Balance info:", balanceFields)
         if (balanceFields.status !== "1") {
-          toast({ title: "Warning", description: "Borrow not initialized. Attempting to borrow may fail.", variant: "default" })
+          console.log("Borrow not initialized. Attempting to borrow may fail.");
         } else {
           setIsInitialized(true)
         }
@@ -161,11 +161,6 @@ export function AvailableBorrowing() {
         <CardTitle className="text-white">Available Borrowing</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!isInitialized && (
-          <div className="text-yellow-200 text-sm">
-            Borrowing not initialized. Attempting to borrow may fail.
-          </div>
-        )}
         <div className="flex justify-between text-sm">
           <span className="text-gray-400">Borrow Token</span>
           <span className="text-white">USDC</span>

@@ -5,10 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useState, useEffect, useCallback } from "react"
 import { useToast } from "@/hooks/use-toast"
-import { AlertTriangle } from "lucide-react"
 import { ethers } from "ethers"
 import BorrowManagementABI from "../../abi/BorrowManagement.json"
 import CollManagementABI from "../../abi/CollManagement.json"
@@ -27,11 +25,32 @@ export function BorrowInterface() {
   const [selectedToken, setSelectedToken] = useState("")
   const [amount, setAmount] = useState("")
   const [available, setAvailable] = useState("0")
-  const [isCorrectChain, setIsCorrectChain] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
   const [liquidationData, setLiquidationData] = useState(null)
-  const [healthFactor, setHealthFactor] = useState("2.45")
+  const [healthFactor, setHealthFactor] = useState("N/A")
   const { toast } = useToast()
+
+  const checkNetworkOnLoad = useCallback(async () => {
+    if (!window.ethereum) {
+      toast({ title: "Error", description: "No wallet detected", variant: "destructive" })
+      return
+    }
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const network = await provider.getNetwork()
+      const chainId = Number(network.chainId)
+      if (chainId !== CHAIN_IDS.SEPOLIA) {
+        toast({ 
+          title: "Network Required", 
+          description: `Please switch to Sepolia (Chain ID: ${CHAIN_IDS.SEPOLIA}) to view collateral and health factor data`, 
+          variant: "default" 
+        })
+      }
+    } catch (error) {
+      console.error("Error checking network on load:", error)
+      toast({ title: "Error", description: "Failed to check network", variant: "destructive" })
+    }
+  }, [toast])
 
   const fetchAvailable = useCallback(async () => {
     if (!window.ethereum) {
@@ -45,12 +64,6 @@ export function BorrowInterface() {
       const network = await provider.getNetwork()
       const chainId = Number(network.chainId)
       console.log("Detected Chain ID:", chainId)
-
-      if (chainId !== CHAIN_IDS.SEPOLIA) {
-        toast({ title: "Warning", description: `Please switch to Sepolia (Chain ID: ${CHAIN_IDS.SEPOLIA}) for collateral data`, variant: "default" })
-      } else {
-        setIsCorrectChain(true)
-      }
 
       const fujiProvider = new ethers.JsonRpcProvider(FUJI_RPC_URL)
       const borrowContract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, fujiProvider)
@@ -75,13 +88,17 @@ export function BorrowInterface() {
         }
         console.log("Balance info:", balanceFields)
         if (balanceFields.status !== "1") {
-          toast({ title: "Warning", description: "Borrow not initialized. Attempting to borrow may fail.", variant: "default" })
+          console.log("Borrow not initialized. Attempting to borrow may fail.")
         } else {
           setIsInitialized(true)
         }
       } catch (borrowError) {
         console.error("Error fetching borrow balance:", borrowError)
         toast({ title: "Error", description: "Failed to fetch borrow balance", variant: "destructive" })
+      }
+
+      if (chainId !== CHAIN_IDS.SEPOLIA) {
+        return // Skip collateral fetch if not on Sepolia
       }
 
       const sepoliaProvider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
@@ -138,23 +155,34 @@ export function BorrowInterface() {
   }, [])
 
   const fetchHealthFactor = useCallback(async () => {
+    if (!window.ethereum) {
+      toast({ title: "Error", description: "No wallet detected", variant: "destructive" })
+      return
+    }
     try {
       const provider = new ethers.BrowserProvider(window.ethereum)
+      const network = await provider.getNetwork()
+      const chainId = Number(network.chainId)
+      if (chainId !== CHAIN_IDS.SEPOLIA) {
+        return // Skip health factor fetch if not on Sepolia
+      }
       const signer = await provider.getSigner()
       const userAddress = await signer.getAddress()
-      const response = await fetch(`${LIQUIDATION_AGENT_API_URL}/health-factor?user=${userAddress}`)
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      const data = await response.json()
-      console.log("Health factor response:", data)
-      if (data.healthFactor === "115792089237316195423570985008687907853269984665640564039457584007913129639935") {
-        setHealthFactor("N/A")
-        toast({ title: "Warning", description: "No active borrow position.", variant: "default" })
+      const contract = new ethers.Contract(COLL_MANAGEMENT_ADDRESS, CollManagementABI.abi, provider)
+      const healthFactorRaw = await contract.getHealthFactor(userAddress)
+      const MAX_UINT256 = '115792089237316195423570985008687907853269984665640564039457584007913129639935'
+      
+      let displayHealthFactor
+      if (healthFactorRaw.toString() === MAX_UINT256) {
+        displayHealthFactor = 'N/A'
+        console.log("No active borrow position.")
       } else {
-        setHealthFactor(data.healthFactor.toFixed(2))
-        toast({ title: "Health Factor Fetched", description: `Health Factor: ${data.healthFactor.toFixed(2)}` })
+        const healthFactor = ethers.formatUnits(healthFactorRaw, 18)
+        displayHealthFactor = parseFloat(healthFactor).toFixed(2)
+        toast({ title: "Health Factor Fetched", description: `Health Factor: ${displayHealthFactor}` })
       }
+      console.log("Display this in the UI:", displayHealthFactor)
+      setHealthFactor(displayHealthFactor)
     } catch (error) {
       console.error("Error fetching health factor:", error)
       toast({ title: "Error", description: "Failed to fetch health factor.", variant: "destructive" })
@@ -162,10 +190,11 @@ export function BorrowInterface() {
   }, [])
 
   useEffect(() => {
+    checkNetworkOnLoad()
     fetchAvailable()
     fetchLiquidationData()
     fetchHealthFactor()
-  }, [fetchAvailable, fetchLiquidationData, fetchHealthFactor])
+  }, [checkNetworkOnLoad, fetchAvailable, fetchLiquidationData, fetchHealthFactor])
 
   const handleBorrow = async () => {
     if (!selectedToken || !amount) {
@@ -178,13 +207,20 @@ export function BorrowInterface() {
       const signer = await provider.getSigner()
       const userAddress = await signer.getAddress()
       const network = await provider.getNetwork()
+      const chainId = Number(network.chainId)
       console.log("Borrow attempt:", {
         userAddress,
-        chainId: Number(network.chainId),
+        chainId,
         selectedToken,
         amount,
         available,
       })
+
+      if (chainId !== CHAIN_IDS.FUJI) {
+        toast({ title: "Network Required", description: `Please switch to Fuji (Chain ID: ${CHAIN_IDS.FUJI}) to borrow`, variant: "default" })
+        return
+      }
+
       const contract = new ethers.Contract(BORROW_MANAGEMENT_ADDRESS, BorrowManagementABI.abi, signer)
       const parsedAmount = ethers.parseUnits(amount, 6)
       if (Number(parsedAmount) > Number(ethers.parseUnits(available, 6))) {
@@ -214,7 +250,7 @@ export function BorrowInterface() {
     }
   }
 
-  const newHealthFactor = amount ? (Number(healthFactor) - Number.parseFloat(amount) / 50000).toFixed(2) : healthFactor
+  const newHealthFactor = amount && healthFactor !== 'N/A' ? (Number(healthFactor) - Number.parseFloat(amount) / 50000).toFixed(2) : healthFactor
   const liquidationPrice = amount ? (1800 - Number.parseFloat(amount) / 10).toFixed(0) : "1800"
 
   return (
@@ -223,14 +259,6 @@ export function BorrowInterface() {
         <CardTitle className="text-white">Borrow Interface</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {!isInitialized && (
-          <Alert className="border-yellow-500 bg-yellow-500/10">
-            <AlertTriangle className="h-4 w-4 text-yellow-500" />
-            <AlertDescription className="text-yellow-200">
-              Borrowing not initialized. Attempting to borrow may fail.
-            </AlertDescription>
-          </Alert>
-        )}
         <div className="space-y-2">
           <Label className="text-gray-300">Borrow Token</Label>
           <Select value={selectedToken} onValueChange={setSelectedToken}>
@@ -297,14 +325,6 @@ export function BorrowInterface() {
                 <span className="text-white">${liquidationPrice} ETH</span>
               </div>
             </div>
-            {Number.parseFloat(newHealthFactor) < 1.5 && (
-              <Alert className="border-yellow-500 bg-yellow-500/10">
-                <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                <AlertDescription className="text-yellow-200">
-                  Warning: This borrow amount will significantly reduce your health factor. Consider borrowing less to maintain a safer position.
-                </AlertDescription>
-              </Alert>
-            )}
           </div>
         )}
         <Button
